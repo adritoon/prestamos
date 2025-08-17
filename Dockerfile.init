@@ -1,0 +1,20 @@
+# Usar la misma imagen base que tu Dockerfile principal para consistencia
+FROM python:3.10-slim
+
+# Crear directorio de la app
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias para psycopg2
+RUN apt-get update && apt-get install -y \
+    libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copiar e instalar dependencias
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el resto de la aplicación
+COPY . .
+
+# Ejecutar init_db.py como comando principal
+CMD ["python", "init_db.py"]
