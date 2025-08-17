@@ -7,6 +7,7 @@ from flask_jwt_extended import (
 )
 from datetime import timedelta, datetime, timezone, date
 import os
+import urllib.parse
 from sqlalchemy import func, or_, and_
 from decimal import Decimal
 import pytz
@@ -15,11 +16,10 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Configuración de la base de datos
 DB_USER = os.getenv('DB_USER', 'postgres')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'crust@ce0S')
+DB_PASSWORD = urllib.parse.quote_plus(os.getenv('DB_PASSWORD', 'crust@ce0S'))  # <-- aquí se escapa
 DB_NAME = os.getenv('DB_NAME', 'prestamos_db')
 
-# Detectar si estamos en Cloud SQL (socket) o en local
-CLOUD_SQL_CONNECTION = os.getenv('CLOUD_SQL_CONNECTION')  # ej: project:region:instance
+CLOUD_SQL_CONNECTION = os.getenv('CLOUD_SQL_CONNECTION')
 
 if CLOUD_SQL_CONNECTION:
     # En Cloud Run con Cloud SQL socket
@@ -28,7 +28,7 @@ if CLOUD_SQL_CONNECTION:
         f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?host={DB_HOST}"
     )
 else:
-    # En local
+    # Local
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_PORT = os.getenv('DB_PORT', '5432')
     SQLALCHEMY_DATABASE_URI = (
