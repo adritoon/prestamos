@@ -16,7 +16,7 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Configuración de la base de datos
 DB_USER = os.getenv('DB_USER', 'postgres')
-DB_PASSWORD = urllib.parse.quote_plus(os.getenv('DB_PASSWORD', 'crust@ce0S'))  # <-- aquí se escapa
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'crust@ce0S') 
 DB_NAME = os.getenv('DB_NAME', 'prestamos_db')
 
 CLOUD_SQL_CONNECTION = os.getenv('CLOUD_SQL_CONNECTION')
