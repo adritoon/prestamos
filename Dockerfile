@@ -1,28 +1,23 @@
-# Imagen base ligera con Python 3.10
+# Imagen base oficial de Python
 FROM python:3.10-slim
 
-# Evita que Python guarde pyc y buffers
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Establecer directorio de trabajo
+# Crear directorio de la app
 WORKDIR /app
 
 # Instalar dependencias del sistema necesarias para psycopg2
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libpq-dev gcc && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements y luego instalarlos
+# Copiar e instalar dependencias
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el resto del proyecto
+# Copiar el resto de la aplicación
 COPY . .
 
-# Puerto que usará la app en Cloud Run
-ENV PORT=8080
+# Exponer puerto (Cloud Run ignora este EXPOSE, pero es buena práctica)
+EXPOSE 8080
 
-# Comando de inicio (Gunicorn en modo producción)
-CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 0 app:app
+# Usar Gunicorn en lugar de Flask dev server
+CMD exec gunicorn --bind :8080 --workers 2 --threads 8 --timeout 0 app:app

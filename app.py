@@ -22,20 +22,21 @@ DB_NAME = os.getenv('DB_NAME', 'prestamos_db')
 CLOUD_SQL_CONNECTION = os.getenv('CLOUD_SQL_CONNECTION')  # ej: project:region:instance
 
 if CLOUD_SQL_CONNECTION:
-    # Estamos en Cloud Run con Cloud SQL → usar socket
+    # En Cloud Run con Cloud SQL socket
     DB_HOST = f"/cloudsql/{CLOUD_SQL_CONNECTION}"
-    DB_PORT = '5432'
+    SQLALCHEMY_DATABASE_URI = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@/{DB_NAME}?host={DB_HOST}"
+    )
 else:
-    # Local
+    # En local
     DB_HOST = os.getenv('DB_HOST', 'localhost')
     DB_PORT = os.getenv('DB_PORT', '5432')
+    SQLALCHEMY_DATABASE_URI = (
+        f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    )
 
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-
-
-app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Configuración de JWT en cookies
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'prestamo123')
