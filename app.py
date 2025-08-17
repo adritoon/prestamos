@@ -15,14 +15,24 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Configuración de la base de datos
 DB_USER = os.getenv('DB_USER', 'postgres')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'root')
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = os.getenv('DB_PORT', '5432')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'crust@ce0S')
 DB_NAME = os.getenv('DB_NAME', 'prestamos_db')
-DATABASE_URL = os.getenv(
-    'DATABASE_URL',
-    f'postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
-)
+
+# Detectar si estamos en Cloud SQL (socket) o en local
+CLOUD_SQL_CONNECTION = os.getenv('CLOUD_SQL_CONNECTION')  # ej: project:region:instance
+
+if CLOUD_SQL_CONNECTION:
+    # Estamos en Cloud Run con Cloud SQL → usar socket
+    DB_HOST = f"/cloudsql/{CLOUD_SQL_CONNECTION}"
+    DB_PORT = '5432'
+else:
+    # Local
+    DB_HOST = os.getenv('DB_HOST', 'localhost')
+    DB_PORT = os.getenv('DB_PORT', '5432')
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
