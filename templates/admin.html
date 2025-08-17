@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel Administrador</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>Panel Administrador</h1>
+        <div id="bienvenida"></div>
+        <button id="btnCerrarSesion">Cerrar Sesión</button>
+    </header>
+
+    <section id="resumen" class="resumen">
+        <h2>Resumen de Créditos</h2>
+        <div class="resumen-grid">
+            <div>Total de Créditos: <span id="totalCreditos">0</span></div>
+            <div>Créditos Vigentes: <span id="creditosVigentes">0</span></div>
+            <div>Créditos Vencidos: <span id="creditosVencidos">0</span></div>
+            <div>Deuda Total: <span id="deudaTotal">S/ 0.00</span></div>
+            <div>Deuda Vencida: <span id="deudaVencidaTotal">S/ 0.00</span></div>
+            <div>Gastos Administrativos: <span id="gastosAdministrativosTotal">S/ 0.00</span></div>
+        </div>
+    </section>
+
+    <nav class="tabs">
+        <button class="tab-btn active" data-target="clientesTab">Clientes</button>
+        <button class="tab-btn" data-target="trabajadoresTab">Trabajadores</button>
+        <button class="tab-btn" data-target="historialTab">Historial de Pagos</button>
+    </nav>
+
+    <!-- PESTAÑA DE CLIENTES -->
+    <section id="clientesTab" class="tab-content active">
+        <div class="toolbar">
+            <div class="button-group">
+                <button onclick="abrirClienteModal()" class="btn-half">
+                    <i class="fas fa-user-plus"></i> Añadir Cliente
+                </button>
+                <button onclick="abrirNuevoPrestamoModal()" class="btn-half">
+                    <i class="fas fa-money-bill-wave"></i> Nuevo Préstamo
+                </button>
+            </div>
+            <input type="text" id="buscarClienteAdmin" placeholder="Buscar cliente (DNI o nombre)" oninput="filtrarClientes(this.value)" />
+            <button onclick="exportarClientesExcel()">
+                <i class="fas fa-file-excel"></i> Exportar Excel
+            </button>
+        </div>
+        <div class="table-container">
+            <table id="clientesTableAdmin">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>DNI</th>
+                        <th>Nombre</th>
+                        <th>Dirección</th>
+                        <th>Teléfono</th>
+                        <th>Monto Principal</th>
+                        <th>Monto Total</th>
+                        <th>Saldo</th>
+                        <th>Tipo</th>
+                        <th>Frecuencia</th>
+                        <th>DT</th>
+                        <th>Cuotas</th>
+                        <th>Deuda Vencida</th>
+                        <th>Cuota Diaria</th>
+                        <th>Fecha Fin</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Datos se cargan dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PESTAÑA DE TRABAJADORES -->
+    <section id="trabajadoresTab" class="tab-content">
+        <div class="toolbar">
+            <button onclick="agregarTrabajador()">
+                <i class="fas fa-user-tie"></i> Añadir Trabajador
+            </button>
+            <input type="text" id="buscarTrabajadorAdmin" placeholder="Buscar trabajador (usuario, nombre o DNI)" oninput="filtrarTrabajadores(this.value)" />
+        </div>
+        <div class="table-container">
+            <table id="trabajadoresTableAdmin">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Nombre</th> <!-- Nueva columna para nombre -->
+                        <th>DNI</th>
+                        <th>Teléfono</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Datos se cargan dinámicamente -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- PESTAÑA DE HISTORIAL DE PAGOS -->
+    <section id="historialTab" class="tab-content">
+        <h2>Historial de Pagos</h2>
+        <div class="toolbar">
+            <input type="text" id="buscarHistorialInput" placeholder="Buscar historial por cliente (DNI o nombre)" oninput="buscarHistorial(this.value)" />
+        </div>
+        <div class="table-container">
+            <table id="prestamosTableAdmin">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>DNI</th>
+                        <th>Monto Principal</th>
+                        <th>Monto Total</th>
+                        <th>Interés</th>
+                        <th>Tipo</th>
+                        <th>Fecha Inicio</th>
+                        <th>Fecha Pago Completo</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="10" class="text-center">Busca un cliente para ver su historial.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- MODAL: AGREGAR CLIENTE Y PRÉSTAMO INICIAL -->
+    <div id="clienteModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarClienteModal()">&times;</span>
+            <h2 id="clienteModalTitle">Añadir Cliente y Préstamo</h2>
+            <form id="clienteForm">
+
+                <h3>Datos del Cliente</h3>
+                <label for="clienteNombreInput">Nombre completo *:</label>
+                <input type="text" id="clienteNombreInput" required />
+
+                <label for="clienteDniInput">DNI *:</label>
+                <input type="text" id="clienteDniInput" required />
+
+                <label for="clienteLugarInput">Dirección:</label>
+                <input type="text" id="clienteLugarInput" />
+
+                <label for="clienteTelefonoInput">Teléfono:</label>
+                <input type="text" id="clienteTelefonoInput" />
+
+                <h3>Datos del Préstamo Inicial</h3>
+                <label for="prestamoMontoInput">Monto Principal (S/) *:</label>
+                <input type="number" id="prestamoMontoInput" step="0.01" min="0" required />
+
+                <label for="prestamoInteresInput">Interés (%) *:</label>
+                <input type="number" id="prestamoInteresInput" step="0.01" min="0" required />
+
+                <div class="monto-total-display">
+                    <strong>Monto Total: <span id="montoTotalDisplay">S/ 0.00</span></strong>
+                </div>
+
+                <label for="prestamoTipoInput">Frecuencia de Pago *:</label>
+                <select id="prestamoTipoInput" required>
+                    <option value="">Seleccione una frecuencia</option>
+                    <option value="Diario">Diario</option>
+                    <option value="Semanal">Semanal</option>
+                    <option value="Quincenal">Quincenal</option>
+                    <option value="Mensual">Mensual</option>
+                </select>
+
+                <label for="prestamoCuotaInput">Cuota Diaria (S/) *:</label>
+                <div class="monto-total-display">
+                    <strong>Cuota Diaria: <span id="cuotaDiariaDisplay">S/ 0.00</span></strong>
+                </div>
+
+                <label for="prestamoFechaInicioInput">Fecha de Inicio *:</label>
+                <input type="date" id="prestamoFechaInicioInput" required />
+
+                <button type="submit" id="clienteSubmitBtn">Guardar Cliente y Préstamo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: NUEVO PRÉSTAMO PARA CLIENTE EXISTENTE -->
+    <div id="nuevoPrestamoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarNuevoPrestamoModal()">&times;</span>
+            <h2>Crear Nuevo Préstamo</h2>
+            <form id="nuevoPrestamoForm">
+                <label for="selectCliente">Cliente *:</label>
+                <select id="selectCliente" required>
+                    <option value="">Seleccione un cliente</option>
+                    <!-- Se carga dinámicamente -->
+                </select>
+                
+                <div id="clienteSeleccionadoInfo" class="cliente-info" style="display:none;">
+                    <!-- Información del cliente seleccionado -->
+                </div>
+
+                <label for="nuevoPrestamoMonto">Monto Principal (S/) *:</label>
+                <input type="number" id="nuevoPrestamoMonto" step="0.01" min="0" required />
+
+                <label for="nuevoPrestamoInteres">Interés (%) *:</label>
+                <input type="number" id="nuevoPrestamoInteres" step="0.01" min="0" required />
+
+                <div class="monto-total-display">
+                    <strong>Monto Total: <span id="nuevoMontoTotalDisplay">S/ 0.00</span></strong>
+                </div>
+
+                <label for="nuevoPrestamoTipo">Frecuencia de Pago *:</label>
+                <select id="nuevoPrestamoTipo" required>
+                    <option value="">Seleccione una frecuencia</option>
+                    <option value="Diario">Diario</option>
+                    <option value="Semanal">Semanal</option>
+                    <option value="Quincenal">Quincenal</option>
+                    <option value="Mensual">Mensual</option>
+                </select>
+
+                <label for="nuevoPrestamoCuota">Cuota Diaria (S/) *:</label>
+                <div class="monto-total-display">
+                    <strong>Cuota Diaria: <span id="nuevoCuotaDiariaDisplay">S/ 0.00</span></strong>
+                </div>
+
+                <label for="nuevoPrestamoFechaInicio">Fecha de Inicio *:</label>
+                <input type="date" id="nuevoPrestamoFechaInicio" required />
+
+                <button type="submit" id="nuevoPrestamoSubmitBtn">Crear Préstamo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: EDITAR CLIENTE -->
+    <div id="editClienteModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarEditClienteModal()">&times;</span>
+            <h2>Editar Cliente</h2>
+            <form id="editClienteForm">
+                <input type="hidden" id="editClienteId" />
+
+                <label for="editClienteNombre">Nombre *:</label>
+                <input type="text" id="editClienteNombre" required />
+
+                <label for="editClienteDireccion">Dirección:</label>
+                <input type="text" id="editClienteDireccion" />
+
+                <label for="editClienteTelefono">Teléfono:</label>
+                <input type="text" id="editClienteTelefono" />
+
+                <button type="submit">Actualizar Cliente</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: AGREGAR/EDITAR TRABAJADOR -->
+    <div id="workerModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarModal()">&times;</span>
+            <h2 id="modalTitle">Añadir Trabajador</h2>
+            <form id="workerForm">
+                <input type="hidden" id="workerId" />
+                
+                <label for="usernameInput">Usuario *:</label>
+                <input type="text" id="usernameInput" required />
+                
+                <label for="nombreInput">Nombre completo *:</label> <!-- Nuevo campo -->
+                <input type="text" id="nombreInput" required />
+
+                <label for="dniInput">DNI:</label>
+                <input type="text" id="dniInput" />
+                
+                <label for="telefonoInput">Teléfono:</label>
+                <input type="text" id="telefonoInput" />
+                
+                <label for="passwordInput">Contraseña *:</label>
+                <div class="password-container">
+                    <input type="password" id="passwordInput" required />
+                    <button type="button" id="togglePassword" onclick="togglePasswordVisibility()">
+                        <img id="passwordIcon" src="{{ url_for('static', filename='icons/eye-open.svg') }}" 
+                             alt="Mostrar contraseña" width="20" height="20">
+                    </button>
+                </div>
+                
+                <button type="submit" id="submitBtn">Guardar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: REGISTRAR CUOTA -->
+    <div id="cuotaModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarModalCuota()">&times;</span>
+            <h2>Registrar Cuota</h2>
+            <form id="cuotaForm">
+                <input type="hidden" id="cuotaPrestamoId" />
+                
+                <div id="cuotaSugerencia" class="sugerencia-info">
+                    <i class="fas fa-info-circle"></i>
+                    Ingrese el monto de la cuota
+                </div>
+                
+                <label for="cuotaMonto">Monto de la Cuota (S/) *:</label>
+                <input type="number" id="cuotaMonto" step="0.01" min="0.01" required />
+                
+                <label for="cuotaDescripcion">Descripción (opcional):</label>
+                <input type="text" id="cuotaDescripcion" placeholder="Ej: Cuota del día, pago parcial..." />
+                
+                <button type="submit">Registrar Cuota</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: REFINANCIAR PRÉSTAMO -->
+    <div id="refinanciarModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarModalRefinanciar()">&times;</span>
+            <h2>Refinanciar Préstamo</h2>
+            <form id="refinanciarForm">
+                <input type="hidden" id="refinanciarPrestamoId" />
+                
+                <div class="refinanciar-info">
+                    <p><strong>Saldo Pendiente:</strong> <span id="saldoPendienteRefinanciar">S/ 0.00</span></p>
+                    <p class="warning-text">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        El préstamo actual será marcado como "refinanciado" y se creará un nuevo préstamo con el saldo pendiente más intereses.
+                    </p>
+                </div>
+                
+                <label for="refinanciarInteres">Nuevo Interés (%) *:</label>
+                <input type="number" id="refinanciarInteres" step="0.01" min="0" required />
+                
+                <label for="refinanciarCuotaDiaria">Nueva Cuota Diaria (S/) *:</label>
+                <div class="monto-total-display">
+                    <strong>Nueva Cuota Diaria: <span id="refinanciarCuotaDiariaDisplay">S/ 0.00</span></strong>
+                </div>
+                
+                <button type="submit">Refinanciar Préstamo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: HISTORIAL DE CUOTAS -->
+    <div id="historialCuotasModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarHistorialCuotas()">&times;</span>
+            <h2>Historial de Cuotas</h2>
+            
+            <div id="prestamoInfoHistorial" class="historial-resumen">
+                <!-- Se llena dinámicamente con info del préstamo -->
+            </div>
+            
+            <div class="historial-resumen">
+                <p><strong>Total Pagado:</strong> <span id="totalPagadoCuotas">S/ 0.00</span></p>
+            </div>
+            
+            <div class="table-container">
+                <table id="historialCuotasTable">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>Descripción</th>
+                            <th>Estado del Pago</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Se llena dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>
