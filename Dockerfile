@@ -19,5 +19,5 @@ COPY . .
 # Exponer puerto (Cloud Run ignora este EXPOSE, pero es buena práctica)
 EXPOSE 8080
 
-# Usar Gunicorn en lugar de Flask dev server
-CMD exec gunicorn --bind :8080 --workers 2 --threads 8 --timeout 0 app:app
+# Ejecutar init_db.py y luego Gunicorn
+CMD python init_db.py && exec gunicorn --bind :8080 --workers 2 --threads 8 --timeout 0 app:app
