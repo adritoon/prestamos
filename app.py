@@ -14,7 +14,7 @@ import pytz
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# Configuración de la base de datos
+# Configuración de la base de datosa
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'crust@ce0S') 
 DB_NAME = os.getenv('DB_NAME', 'prestamos_db')
