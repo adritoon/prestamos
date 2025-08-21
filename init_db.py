@@ -60,6 +60,12 @@ def agregar_columnas_faltantes():
                     connection.commit()  # Confirmar los cambios
                 print("Columnas agregadas exitosamente a prestamos.")
             
+            # Agregar la tabla de movimientos si no existe
+            if 'movimientos' not in inspector.get_table_names():
+                print("Creando tabla de movimientos...")
+                db.create_all(app=app) # Esto creará las tablas que no existen, incluyendo 'movimientos'
+                print("Tabla de movimientos creada exitosamente.")
+
             # Verificar columnas de cuotas
             if 'cuotas' in inspector.get_table_names():
                 cuotas_columns = [col['name'] for col in inspector.get_columns('cuotas')]
@@ -453,91 +459,7 @@ def generar_datos_de_prueba():
             
             print("Creando datos de prueba...")
             
-            # Obtener el ID del trabajador por defecto
-            trabajador = Usuario.query.filter_by(username='trabajador').first()
-            trabajador_id = trabajador.id if trabajador else None
-
-            # Cliente 1
-            cliente1 = Cliente(
-                nombre="Juan Pérez García",
-                dni="12345678",
-                direccion="Av. Los Olivos 123, Lima",
-                telefono="987654321",
-                trabajador_id=trabajador_id  
-            )
-            db.session.add(cliente1)
-            db.session.flush()
             
-            # Préstamo para cliente 1 (activo con mora)
-            fecha_inicio1 = db.func.current_date() - text("INTERVAL '40 days'")  # Préstamo vencido
-            prestamo1 = Prestamo(
-                cliente_id=cliente1.id,
-                monto_principal=Decimal('1000.00'),
-                interes=Decimal('20.00'),
-                monto_total=Decimal('1200.00'),
-                fecha_inicio=fecha_inicio1,
-                fecha_fin=fecha_inicio1 + text("INTERVAL '30 days'"),
-                saldo=Decimal('1200.00'),
-                tipo_prestamo='CR',
-                tipo_frecuencia='Diario',
-                cuota_diaria=Decimal('40.00'),
-                estado='vencido'
-            )
-            db.session.add(prestamo1)
-            db.session.flush()
-
-            # Cuota con mora para préstamo 1
-            cuota1 = Cuota(
-                prestamo_id=prestamo1.id,
-                monto=Decimal('40.00'),
-                fecha_pago=db.func.current_date(),
-                descripcion="Cuota con mora",
-                estado_pago='con_retraso'
-            )
-            db.session.add(cuota1)
-            
-            # Cliente 2 - con préstamo pagado
-            cliente2 = Cliente(
-                nombre="María López Silva",
-                dni="87654321",
-                direccion="Jr. Las Flores 456, Lima",
-                telefono="912345678",
-                trabajador_id=trabajador_id 
-            )
-            db.session.add(cliente2)
-            db.session.flush()
-            
-            # Préstamo pagado para cliente 2
-            fecha_inicio2 = db.func.current_date() - text("INTERVAL '30 days'")
-            prestamo2 = Prestamo(
-                cliente_id=cliente2.id,
-                monto_principal=Decimal('500.00'),
-                interes=Decimal('15.00'),
-                monto_total=Decimal('575.00'),
-                fecha_inicio=fecha_inicio2,
-                fecha_fin=fecha_inicio2 + text("INTERVAL '30 days'"),  # Añadir fecha_fin
-                saldo=Decimal('0.00'),
-                tipo_prestamo='CR',
-                tipo_frecuencia='Diario',
-                cuota_diaria=Decimal('25.00'),
-                estado='pagado',
-                fecha_pago_completo=db.func.current_date()
-            )
-            db.session.add(prestamo2)
-            db.session.flush()
-            
-            # Cuotas para el préstamo pagado
-            for i in range(23):  # 23 cuotas de 25 = 575
-                cuota = Cuota(
-                    prestamo_id=prestamo2.id,
-                    monto=Decimal('25.00'),
-                    fecha_pago=db.func.current_date() - text(f"INTERVAL '{22-i} days'"),
-                    descripcion=f"Cuota día {i+1}",
-                    estado_pago='a_tiempo'
-                )
-                db.session.add(cuota)
-            
-            db.session.commit()
             print("Datos de prueba creados exitosamente.")
             
         except Exception as e:

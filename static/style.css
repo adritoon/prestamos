@@ -1197,3 +1197,51 @@ select:focus-visible {
 #historialCuotasTable th {
     background-color: #f2f2f2;
 }
+
+/* NUEVOS ESTILOS PARA FLUJO DE CAJA */
+.flujo-resumen {
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.flujo-resumen .card {
+    background: #333;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    min-width: 250px;
+    flex-grow: 1;
+}
+
+.flujo-resumen h3 {
+    margin-top: 0;
+    color: #00bcd4;
+}
+
+.flujo-resumen p {
+    margin: 5px 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.flujo-resumen p span {
+    font-size: 1.4rem;
+    color: #fff;
+}
+
+.text-green {
+    color: #4CAF50 !important;
+}
+
+.text-red {
+    color: #F44336 !important;
+}
+
+/* NUEVO ESTILO PARA REFINANCIAMIENTO */
+.text-yellow {
+    color: #ffc107 !important; /* Un color amarillo para diferenciarlo */
+}

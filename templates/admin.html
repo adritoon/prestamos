@@ -33,6 +33,7 @@
         <button class="tab-btn active" data-target="clientesTab">Clientes</button>
         <button class="tab-btn" data-target="trabajadoresTab">Trabajadores</button>
         <button class="tab-btn" data-target="historialTab">Historial de Pagos</button>
+        <button class="tab-btn" data-target="flujoCajaTab">Flujo de Caja</button>
     </nav>
 
     <!-- PESTAÑA DE CLIENTES -->
@@ -388,6 +389,76 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <section id="flujoCajaTab" class="tab-content">
+        <h2>Flujo de Caja</h2>
+
+        <div class="flujo-resumen">
+            <div class="card resumen-diario-card">
+                <h3>Resumen del Día</h3>
+                <p>Ingresos: <span id="ingresosDiarios">S/ 0.00</span></p>
+                <p>Egresos: <span id="egresosDiarios">S/ 0.00</span></p>
+                <p>Balance: <span id="balanceDiario">S/ 0.00</span></p>
+            </div>
+            <div class="card resumen-mensual-card">
+                <h3>Resumen del Mes</h3>
+                <p>Ingresos: <span id="ingresosMensuales">S/ 0.00</span></p>
+                <p>Egresos: <span id="egresosMensuales">S/ 0.00</span></p>
+                <p>Balance: <span id="balanceMensual">S/ 0.00</span></p>
+            </div>
+        </div>
+        
+        <div class="toolbar">
+            <div class="button-group">
+                <button onclick="abrirModalMovimiento()" class="btn-half">
+                    <i class="fas fa-plus-circle"></i> Agregar Movimiento
+                </button>
+                <button onclick="exportarFlujoCajaExcel()" class="btn-half">
+                    <i class="fas fa-file-excel"></i> Exportar a Excel
+                </button>
+            </div>
+        </div>
+
+        <h3>Historial de Transacciones</h3>
+        <div class="table-container">
+            <table id="flujoCajaTable">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Descripción</th>
+                        <th>Tipo</th>
+                        <th>Monto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </div>
+    </section>
+    <div id="movimientoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="cerrarModalMovimiento()">&times;</span>
+            <h2>Agregar Movimiento</h2>
+            <form id="formMovimiento">
+                <label for="tipoMovimiento">Tipo:</label>
+                <select id="tipoMovimiento" name="tipo" required>
+                    <option value="ingreso">Ingreso</option>
+                    <option value="egreso">Egreso</option>
+                </select>
+                
+                <label for="fechaMovimiento">Fecha:</label>
+                <input type="date" id="fechaMovimiento" name="fecha" required>
+                
+                <label for="montoMovimiento">Monto:</label>
+                <input type="number" id="montoMovimiento" name="monto" step="0.01" required>
+                
+                <label for="descripcionMovimiento">Descripción:</label>
+                <textarea id="descripcionMovimiento" name="descripcion" placeholder="Descripción del movimiento"></textarea>
+                
+                <button type="submit">Guardar</button>
+            </form>
         </div>
     </div>
 

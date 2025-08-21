@@ -901,6 +901,99 @@ async function buscarHistorial(searchText) {
     }
 }
 
+// NUEVAS FUNCIONES PARA FLUJO DE CAJA
+async function cargarFlujoCaja() {
+    const resumenDiarioIngresos = document.getElementById('ingresosDiarios');
+    const resumenDiarioEgresos = document.getElementById('egresosDiarios');
+    const resumenDiarioBalance = document.getElementById('balanceDiario');
+    const resumenMensualIngresos = document.getElementById('ingresosMensuales');
+    const resumenMensualEgresos = document.getElementById('egresosMensuales');
+    const resumenMensualBalance = document.getElementById('balanceMensual');
+    const tableBody = document.querySelector('#flujoCajaTable tbody');
+
+    try {
+        const { res, data } = await fetchJSON('/api/flujo-caja');
+        if (!res.ok) {
+            throw new Error(data?.msg || 'Error al cargar el flujo de caja');
+        }
+
+        const { resumen_diario, resumen_mensual, historial } = data;
+
+        // Rellenar resúmenes
+        resumenDiarioIngresos.textContent = formatearMoneda(resumen_diario.ingresos);
+        resumenDiarioEgresos.textContent = formatearMoneda(resumen_diario.egresos);
+        resumenDiarioBalance.textContent = formatearMoneda(resumen_diario.balance);
+        resumenDiarioBalance.style.color = resumen_diario.balance >= 0 ? '#4CAF50' : '#F44336';
+        
+        resumenMensualIngresos.textContent = formatearMoneda(resumen_mensual.ingresos);
+        resumenMensualEgresos.textContent = formatearMoneda(resumen_mensual.egresos);
+        resumenMensualBalance.textContent = formatearMoneda(resumen_mensual.balance);
+        resumenMensualBalance.style.color = resumen_mensual.balance >= 0 ? '#4CAF50' : '#F44336';
+        
+        // Rellenar historial
+        tableBody.innerHTML = '';
+        historial.forEach(item => {
+            const tr = document.createElement('tr');
+            let colorClase = '';
+            if (item.tipo === 'ingreso') {
+                colorClase = 'text-green';
+            } else if (item.tipo === 'egreso') {
+                colorClase = 'text-red';
+            } else { // 'refinanciación'
+                colorClase = 'text-yellow';
+            }
+            tr.innerHTML = `
+                <td>${item.fecha}</td>
+                <td>${item.descripcion}</td>
+                <td class="${colorClase}">${item.tipo.toUpperCase()}</td>
+                <td class="${colorClase}">${formatearMoneda(item.monto)}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+
+    } catch (error) {
+        console.error('Error al cargar el flujo de caja:', error);
+        tableBody.innerHTML = '<tr><td colspan="4">Error al cargar datos.</td></tr>';
+    }
+}
+
+function abrirModalMovimiento() {
+    const modal = document.getElementById('movimientoModal');
+    modal.style.display = 'block';
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('fechaMovimiento').value = today;
+}
+
+function cerrarModalMovimiento() {
+    const modal = document.getElementById('movimientoModal');
+    modal.style.display = 'none';
+    document.getElementById('formMovimiento').reset();
+}
+
+async function guardarMovimiento(event) {
+    event.preventDefault();
+    const form = document.getElementById('formMovimiento');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    try {
+        const { res, data: resData } = await fetchJSON('/api/movimiento-administrativo', 'POST', data);
+        if (!res.ok) {
+            throw new Error(resData?.msg || 'Error al guardar el movimiento');
+        }
+        alert('Movimiento guardado exitosamente');
+        cerrarModalMovimiento();
+        cargarFlujoCaja(); // Recargar los datos para ver el nuevo movimiento
+    } catch (error) {
+        console.error('Error al guardar movimiento:', error);
+        alert(error.message);
+    }
+}
+
+function exportarFlujoCajaExcel() {
+    window.location.href = '/api/flujo-caja/exportar';
+}
+
 function filtrarClientes(searchText) {
     const table = document.getElementById('clientesTableAdmin') || document.getElementById('clientesTableTrabajador');
     if (!table) return;
@@ -1555,3 +1648,14 @@ window.togglePasswordVisibility = togglePasswordVisibility;
 window.actualizarMontoTotal = actualizarMontoTotal;
 window.calcularMontoTotal = calcularMontoTotal;
 window.formatearMoneda = formatearMoneda;
+
+// NUEVOS LISTENERS
+document.querySelector('[data-target="flujoCajaTab"]').addEventListener('click', cargarFlujoCaja);
+document.getElementById('formMovimiento').addEventListener('submit', guardarMovimiento);
+
+// Exponer las nuevas funciones para que puedan ser llamadas desde el HTML
+window.abrirModalMovimiento = abrirModalMovimiento;
+window.cerrarModalMovimiento = cerrarModalMovimiento;
+window.exportarFlujoCajaExcel = exportarFlujoCajaExcel;
+window.guardarMovimiento = guardarMovimiento;
+window.cargarFlujoCaja = cargarFlujoCaja;

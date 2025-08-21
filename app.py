@@ -285,6 +285,15 @@ class Pago(db.Model):
             'fecha_pago': self.fecha_pago.isoformat() if self.fecha_pago else None
         }
 
+# NUEVO MODELO PARA FLUJO DE CAJA (INGRESOS/EGRESOS ADMINISTRATIVOS)
+class Movimiento(db.Model):
+    __tablename__ = 'movimientos'
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.Date, nullable=False)
+    tipo = db.Column(db.String(10), nullable=False) # 'ingreso' o 'egreso'
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    descripcion = db.Column(db.Text, nullable=True)
+    fecha_registro = db.Column(db.DateTime, server_default=db.func.now())
 
 # ---------------- AUTENTICACIÓN ----------------
 @app.route('/auth/login', methods=['POST'])
@@ -471,6 +480,16 @@ def crear_cliente_con_prestamo():
             dt=0
         )
         db.session.add(nuevo_prestamo)
+        # Registrar el gasto administrativo si aplica
+        gastos_administrativos = nuevo_prestamo.calcular_gastos_administrativos()
+        if gastos_administrativos > 0:
+            movimiento_gastos = Movimiento(
+                fecha=get_current_date(),
+                tipo='ingreso',
+                monto=gastos_administrativos,
+                descripcion='Ingreso administrativo por nuevo préstamo'
+            )
+            db.session.add(movimiento_gastos)
         db.session.commit()
 
         return jsonify({'msg': 'Cliente y préstamo creados', 'cliente': nuevo_cliente.to_dict()}), 201
@@ -556,6 +575,16 @@ def api_create_prestamo():
             dt=0
         )
         db.session.add(p)
+        # Registrar el gasto administrativo si aplica
+        gastos_administrativos = p.calcular_gastos_administrativos()
+        if gastos_administrativos > 0:
+            movimiento_gastos = Movimiento(
+                fecha=get_current_date(),
+                tipo='ingreso',
+                monto=gastos_administrativos,
+                descripcion='Ingreso administrativo por nuevo préstamo'
+            )
+            db.session.add(movimiento_gastos)
         db.session.commit()
         return jsonify(p.to_dict()), 201
     except Exception as e:
@@ -838,6 +867,211 @@ def get_estado_pago_text(estado_pago):
 def api_pagar_prestamo(prestamo_id):
     return registrar_cuota(prestamo_id)
 
+# NUEVAS RUTAS API PARA FLUJO DE CAJA
+@app.route('/api/movimiento-administrativo', methods=['POST'])
+@jwt_required()
+def agregar_movimiento():
+    """Agrega un nuevo movimiento administrativo (ingreso o egreso)."""
+    try:
+        data = request.get_json()
+        fecha = datetime.strptime(data['fecha'], '%Y-%m-%d').date()
+        monto = Decimal(data['monto'])
+        if monto <= 0:
+            return jsonify({'msg': 'El monto debe ser un valor positivo'}), 400
+
+        nuevo_movimiento = Movimiento(
+            fecha=fecha,
+            tipo=data['tipo'],
+            monto=monto,
+            descripcion=data.get('descripcion')
+        )
+        db.session.add(nuevo_movimiento)
+        db.session.commit()
+        return jsonify({'msg': 'Movimiento registrado exitosamente'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'msg': f'Error al registrar movimiento: {str(e)}'}), 500
+
+@app.route('/api/flujo-caja', methods=['GET'])
+@jwt_required()
+def get_flujo_caja():
+    """Calcula y devuelve los resúmenes diarios, mensuales y el historial de transacciones."""
+    try:
+        hoy = get_current_date()
+        mes_actual = hoy.replace(day=1)
+
+        # Ingresos: Cuotas pagadas y movimientos administrativos de tipo 'ingreso'
+        ingresos_cuotas_hoy = db.session.query(func.sum(Cuota.monto)).filter(
+            Cuota.fecha_pago == hoy
+        ).scalar() or Decimal(0)
+        ingresos_admin_hoy = db.session.query(func.sum(Movimiento.monto)).filter(
+            Movimiento.fecha == hoy,
+            Movimiento.tipo == 'ingreso'
+        ).scalar() or Decimal(0)
+        
+        # Egresos: Monto principal de préstamos nuevos y movimientos administrativos de tipo 'egreso'
+        egresos_prestamos_hoy = db.session.query(func.sum(Prestamo.monto_principal)).filter(
+            Prestamo.fecha_inicio == hoy,
+            Prestamo.tipo_prestamo == 'CR'
+        ).scalar() or Decimal(0)
+        egresos_admin_hoy = db.session.query(func.sum(Movimiento.monto)).filter(
+            Movimiento.fecha == hoy,
+            Movimiento.tipo == 'egreso'
+        ).scalar() or Decimal(0)
+
+        resumen_diario = {
+            'ingresos': float(ingresos_cuotas_hoy + ingresos_admin_hoy),
+            'egresos': float(egresos_prestamos_hoy + egresos_admin_hoy),
+            'balance': float(ingresos_cuotas_hoy + ingresos_admin_hoy - egresos_prestamos_hoy - egresos_admin_hoy)
+        }
+
+        # Resumen mensual
+        ingresos_cuotas_mes = db.session.query(func.sum(Cuota.monto)).filter(
+            func.extract('month', Cuota.fecha_pago) == mes_actual.month,
+            func.extract('year', Cuota.fecha_pago) == mes_actual.year
+        ).scalar() or Decimal(0)
+        ingresos_admin_mes = db.session.query(func.sum(Movimiento.monto)).filter(
+            func.extract('month', Movimiento.fecha) == mes_actual.month,
+            func.extract('year', Movimiento.fecha) == mes_actual.year,
+            Movimiento.tipo == 'ingreso'
+        ).scalar() or Decimal(0)
+        egresos_prestamos_mes = db.session.query(func.sum(Prestamo.monto_principal)).filter(
+            func.extract('month', Prestamo.fecha_inicio) == mes_actual.month,
+            func.extract('year', Prestamo.fecha_inicio) == mes_actual.year,
+            Prestamo.tipo_prestamo == 'CR'
+        ).scalar() or Decimal(0)
+        egresos_admin_mes = db.session.query(func.sum(Movimiento.monto)).filter(
+            func.extract('month', Movimiento.fecha) == mes_actual.month,
+            func.extract('year', Movimiento.fecha) == mes_actual.year,
+            Movimiento.tipo == 'egreso'
+        ).scalar() or Decimal(0)
+        
+        resumen_mensual = {
+            'ingresos': float(ingresos_cuotas_mes + ingresos_admin_mes),
+            'egresos': float(egresos_prestamos_mes + egresos_admin_mes),
+            'balance': float(ingresos_cuotas_mes + ingresos_admin_mes - egresos_prestamos_mes - egresos_admin_mes)
+        }
+        
+        # Historial de transacciones
+        cuotas = db.session.query(Cuota, Cliente)\
+                          .join(Prestamo, Cuota.prestamo_id == Prestamo.id)\
+                          .join(Cliente, Prestamo.cliente_id == Cliente.id)\
+                          .all()
+        prestamos = db.session.query(Prestamo, Cliente)\
+                             .join(Cliente, Prestamo.cliente_id == Cliente.id)\
+                             .all()
+        movimientos_admin = Movimiento.query.all()
+
+        # Construir la lista de transacciones sin ordenar
+        transacciones_cuotas = [{
+            'fecha': c.fecha_pago.isoformat(),
+            'descripcion': f'Pago de cuota de {cliente.nombre} (DNI: {cliente.dni})',
+            'tipo': 'ingreso',
+            'monto': float(c.monto)
+        } for c, cliente in cuotas]
+        
+        transacciones_prestamos = []
+        for p, cliente in prestamos:
+            if p.tipo_prestamo == 'CR':
+                transacciones_prestamos.append({
+                    'fecha': p.fecha_inicio.isoformat(),
+                    'descripcion': f'Préstamo otorgado a {cliente.nombre} (DNI: {cliente.dni})',
+                    'tipo': 'egreso',
+                    'monto': float(p.monto_principal)
+                })
+            else:
+                transacciones_prestamos.append({
+                    'fecha': p.fecha_inicio.isoformat(),
+                    'descripcion': f'Refinanciamiento a {cliente.nombre} (DNI: {cliente.dni})',
+                    'tipo': 'refinanciación',
+                    'monto': float(p.monto_principal)
+                })
+        
+        transacciones_admin = [{
+            'fecha': m.fecha.isoformat(),
+            'descripcion': m.descripcion,
+            'tipo': m.tipo,
+            'monto': float(m.monto)
+        } for m in movimientos_admin]
+        
+        # Unir todas las listas y ordenar por fecha
+        transacciones = transacciones_cuotas + transacciones_prestamos + transacciones_admin
+        transacciones.sort(key=lambda x: datetime.fromisoformat(x['fecha']), reverse=True)
+
+        return jsonify({
+            'resumen_diario': resumen_diario,
+            'resumen_mensual': resumen_mensual,
+            'historial': transacciones
+        })
+    except Exception as e:
+        return jsonify({'msg': f'Error al generar flujo de caja: {str(e)}'}), 500
+
+@app.route('/api/flujo-caja/exportar', methods=['GET'])
+@jwt_required()
+def exportar_flujo_caja_excel():
+    """Exporta el historial completo de transacciones a un archivo CSV."""
+    try:
+        # Aquí puedes usar la misma lógica para obtener las transacciones
+        # que en la ruta get_flujo_caja, pero sin la parte de resumen.
+        # Por simplicidad, se usará la misma lógica que la ruta anterior.
+        cuotas = db.session.query(Cuota, Cliente)\
+                          .join(Prestamo, Cuota.prestamo_id == Prestamo.id)\
+                          .join(Cliente, Prestamo.cliente_id == Cliente.id)\
+                          .all()
+        prestamos = db.session.query(Prestamo, Cliente)\
+                             .join(Cliente, Prestamo.cliente_id == Cliente.id)\
+                             .all()
+        movimientos_admin = Movimiento.query.all()
+
+        # Construir la lista de transacciones sin ordenar
+        transacciones_cuotas = [{
+            'fecha': c.fecha_pago.isoformat(),
+            'descripcion': f'Pago de cuota de {cliente.nombre} (DNI: {cliente.dni})',
+            'tipo': 'ingreso',
+            'monto': float(c.monto)
+        } for c, cliente in cuotas]
+
+        transacciones_prestamos = []
+        for p, cliente in prestamos:
+            if p.tipo_prestamo == 'CR':
+                transacciones_prestamos.append({
+                    'fecha': p.fecha_inicio.isoformat(),
+                    'descripcion': f'Préstamo otorgado a {cliente.nombre} (DNI: {cliente.dni})',
+                    'tipo': 'egreso',
+                    'monto': float(p.monto_principal)
+                })
+            else:
+                transacciones_prestamos.append({
+                    'fecha': p.fecha_inicio.isoformat(),
+                    'descripcion': f'Refinanciamiento a {cliente.nombre} (DNI: {cliente.dni})',
+                    'tipo': 'refinanciación',
+                    'monto': float(p.monto_principal)
+                })
+
+        transacciones_admin = [{
+            'fecha': m.fecha.isoformat(),
+            'descripcion': m.descripcion,
+            'tipo': m.tipo,
+            'monto': float(m.monto)
+        } for m in movimientos_admin]
+        
+        # Unir todas las listas y ordenar por fecha
+        transacciones = transacciones_cuotas + transacciones_prestamos + transacciones_admin
+        transacciones.sort(key=lambda x: datetime.fromisoformat(x['fecha']), reverse=True)
+
+        # Preparar el archivo CSV
+        si = StringIO()
+        cw = csv.writer(si)
+        cw.writerow(['Fecha', 'Descripción', 'Tipo', 'Monto'])
+        for t in transacciones:
+            cw.writerow([t['fecha'], t['descripcion'], t['tipo'], t['monto']])
+
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=flujo_de_caja.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return jsonify({'msg': f'Error al exportar a Excel: {str(e)}'}), 500
 
 # ---------------- PÁGINAS HTML ----------------
 @app.route('/')
@@ -1194,6 +1428,17 @@ def refinanciar_prestamo(prestamo_id):
         )
         
         db.session.add(prestamo_refinanciado)
+        # Registrar el ingreso administrativo si aplica
+        gastos_administrativos_ref = prestamo_refinanciado.calcular_gastos_administrativos()
+        if gastos_administrativos_ref > 0:
+            movimiento_gastos_ref = Movimiento(
+                fecha=get_current_date(),
+                tipo='ingreso',
+                monto=gastos_administrativos_ref,
+                descripcion=f'Gasto administrativo por refinanciamiento de {prestamo_original.cliente.nombre} (DNI: {prestamo_original.cliente.dni}), Préstamo original iniciado en {prestamo_original.fecha_inicio.strftime("%Y-%m-%d")}'
+            )
+            db.session.add(movimiento_gastos_ref)
+
         db.session.commit()
 
         return jsonify({
