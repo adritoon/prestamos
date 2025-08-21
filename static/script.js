@@ -485,6 +485,9 @@ function mostrarHistorialCuotas(data) {
             <p><strong>Saldo Actual:</strong> ${formatearMoneda(data.prestamo_info.saldo_actual)}</p>
             <p><strong>Mora Total:</strong> ${formatearMoneda(data.prestamo_info.mora_total)}</p>
             <p><strong>Estado:</strong> <span class="${getEstadoBadgeClass(data.prestamo_info.estado)}">${data.prestamo_info.estado.toUpperCase()}</span></p>
+            <button class="action-btn primary-btn" onclick="exportarCuotasXLS(${data.prestamo_id})" title="Exportar a Excel">
+                <i class="fas fa-file-excel"></i> Exportar a Excel
+            </button>
         `;
     }
     
@@ -513,6 +516,50 @@ function cerrarHistorialCuotas() {
     document.getElementById('historialCuotasModal').style.display = 'none';
 }
 
+function exportarCuotasXLS(prestamoId) {
+    // Obtener el contenedor de información del préstamo y la tabla de cuotas
+    const prestamoInfo = document.getElementById('prestamoInfoHistorial');
+    const table = document.getElementById('historialCuotasTable');
+    const totalPagado = document.getElementById('totalPagadoCuotas');
+    
+    if (!prestamoInfo || !table || !totalPagado) {
+        alert('No se encontró información para exportar');
+        return;
+    }
+
+    // Crear un contenedor HTML para el contenido del archivo
+    let html = `
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                h4 { font-size: 16px; }
+                p { margin: 5px 0; }
+            </style>
+        </head>
+        <body>
+            ${prestamoInfo.innerHTML}
+            <br>
+            ${table.outerHTML}
+            <p><strong>Total Pagado:</strong> ${totalPagado.textContent}</p>
+        </body>
+        </html>
+    `;
+
+    // Crear y descargar el archivo
+    let url = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = `Historial_Cuotas_Prestamo_${prestamoId}_${new Date().toISOString().split('T')[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotification('Historial de cuotas exportado correctamente', 'success');
+}
+
 async function calcularCuotaSugerida(prestamoId) {
     try {
         const rows = document.querySelectorAll('#clientesTableAdmin tbody tr, #clientesTableTrabajador tbody tr');
@@ -522,11 +569,11 @@ async function calcularCuotaSugerida(prestamoId) {
             for (let button of buttons) {
                 if (button.onclick.toString().includes(prestamoId)) {
                     const cells = row.querySelectorAll('td');
-                    const deudaVencidaText = cells[12]?.textContent || 'S/ 0.00';
+                    const deudaVencidaText = cells[13]?.textContent || 'S/ 0.00';
                     const deudaVencida = parseFloat(deudaVencidaText.replace('S/ ', ''));
-                    const montoTotalText = cells[6]?.textContent || 'S/ 0.00';
+                    const montoTotalText = cells[7]?.textContent || 'S/ 0.00';
                     const montoTotal = parseFloat(montoTotalText.replace('S/ ', ''));
-                    const cuotaDiariaText = cells[13]?.textContent || 'S/ 0.00';
+                    const cuotaDiariaText = cells[14]?.textContent || 'S/ 0.00';
                     const cuotaDiaria = parseFloat(cuotaDiariaText.replace('S/ ', ''));
                     
                     const cuotaInput = document.getElementById('cuotaMonto');
@@ -573,7 +620,7 @@ async function cargarInfoPrestamoRefinanciar(prestamoId) {
             for (let button of buttons) {
                 if (button.onclick.toString().includes(prestamoId)) {
                     const cells = row.querySelectorAll('td');
-                    const saldoText = cells[7]?.textContent || 'S/ 0.00';
+                    const saldoText = cells[8]?.textContent || 'S/ 0.00';
                     const saldoPendiente = parseFloat(saldoText.replace('S/ ', ''));
                     
                     document.getElementById('saldoPendienteRefinanciar').textContent = formatearMoneda(saldoPendiente);

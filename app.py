@@ -164,7 +164,7 @@ class Prestamo(db.Model):
         # Calcular mora si el préstamo está vencido
         mora_total = Decimal('0.0')
         if hoy > fecha_fin and self.saldo > 0:
-            dias_vencidos = calcular_dias_habiles(fecha_fin, hoy)  # Usar días hábiles para consistencia
+            dias_vencidos = (hoy - fecha_fin).days   # Usar días hábiles para consistencia
             mora_diaria = Decimal('0.005') * self.monto_total
             mora_total = mora_diaria * Decimal(str(max(0, dias_vencidos)))
 
@@ -336,6 +336,7 @@ def refresh_expiring_jwts(response):
 
 
 # ---------------- FUNCIONES AUXILIARES ----------------
+
 def calcular_monto_total(monto_principal, interes):
     monto_principal = Decimal(str(monto_principal))
     interes = Decimal(str(interes))
@@ -768,6 +769,67 @@ def api_actualizar_prestamos():
         return jsonify({'msg': 'Error al actualizar préstamos', 'error': str(e)}), 500
 
 
+@app.route('/api/prestamos/<int:prestamo_id>/cuotas/export', methods=['GET'])
+@jwt_required()
+def exportar_cuotas_csv(prestamo_id):
+    claims = get_jwt()
+    if claims.get('rol') not in ['admin', 'trabajador']:
+        return jsonify({'msg': 'No autorizado'}), 403
+
+    prestamo = Prestamo.query.get_or_404(prestamo_id)
+    cliente = Cliente.query.get_or_404(prestamo.cliente_id)
+    cuotas = Cuota.query.filter_by(prestamo_id=prestamo_id).order_by(Cuota.fecha_pago.desc()).all()
+
+    # Crear un buffer de texto para el CSV
+    output = StringIO()
+    writer = csv.writer(output, lineterminator='\n')
+
+    # Escribir información del cliente y préstamo
+    writer.writerow(['Información del Préstamo'])
+    writer.writerow(['Cliente', 'DNI', 'ID Préstamo', 'Monto Total', 'Saldo Actual', 'Mora Total', 'Estado'])
+    writer.writerow([
+        cliente.nombre,
+        cliente.dni,
+        prestamo.id,
+        float(prestamo.monto_total),
+        float(prestamo.saldo),
+        float(prestamo.calcular_deuda_vencida()[2]),  # Mora pendiente
+        prestamo.estado.upper()
+    ])
+    writer.writerow([])  # Línea en blanco para separar
+
+    # Escribir encabezados de cuotas
+    writer.writerow(['Historial de Cuotas'])
+    writer.writerow(['ID Cuota', 'Fecha de Pago', 'Monto', 'Descripción', 'Estado de Pago'])
+
+    # Escribir datos de las cuotas
+    for cuota in cuotas:
+        writer.writerow([
+            cuota.id,
+            cuota.fecha_pago.strftime('%Y-%m-%d'),
+            float(cuota.monto),
+            cuota.descripcion or 'Cuota diaria',
+            get_estado_pago_text(cuota.estado_pago)
+        ])
+
+    output.seek(0)
+
+    # Crear respuesta con el archivo CSV
+    response = make_response(output.read())
+    response.headers['Content-Disposition'] = f'attachment; filename=Historial_Cuotas_Prestamo_{prestamo_id}_{datetime.now(TIMEZONE).strftime("%Y%m%d")}.csv'
+    response.headers['Content-Type'] = 'text/csv'
+
+    return response
+
+# Función auxiliar para traducir el estado de pago
+def get_estado_pago_text(estado_pago):
+    textos = {
+        'a_tiempo': 'A Tiempo',
+        'con_retraso': 'Con Retraso',
+        'anticipado': 'Anticipado'
+    }
+    return textos.get(estado_pago, 'Desconocido')
+
 # Mantener compatibilidad
 @app.route('/api/prestamos/<int:prestamo_id>/pagar', methods=['POST'])
 @jwt_required()
@@ -1002,59 +1064,73 @@ def registrar_cuota(prestamo_id):
 
     try:
         monto_cuota = Decimal(str(monto_cuota))
-        prestamo.calcular_dias_transcurridos()
         hoy = get_current_date()
         fecha_fin = prestamo.fecha_fin or (prestamo.fecha_inicio + timedelta(days=30))
         
         # Calcular deuda vencida y mora antes del pago
         deuda_vencida, deuda_vencida_base, mora_pendiente = prestamo.calcular_deuda_vencida()
-
+        
         if prestamo.saldo <= 0:
             return jsonify({'msg': 'El préstamo ya está completamente pagado'}), 400
 
-        # Distribuir el pago: primero a la deuda base, luego a la mora
+        # Distribuir el pago
         monto_a_deuda_base = min(monto_cuota, Decimal(str(deuda_vencida_base)))
         monto_a_mora = min(monto_cuota - monto_a_deuda_base, Decimal(str(mora_pendiente)))
-        monto_real_cuota = monto_a_deuda_base + monto_a_mora
-
+        monto_a_saldo = monto_cuota - monto_a_deuda_base - monto_a_mora
+        monto_real_cuota = monto_a_deuda_base + monto_a_mora + monto_a_saldo
+        
         # Actualizar saldo
         saldo_completado = False
         if prestamo.saldo <= monto_real_cuota:
             monto_real_cuota = prestamo.saldo
             prestamo.saldo = Decimal('0.0')
             prestamo.estado = 'pagado'
-            prestamo.fecha_pago_completo = get_current_date()
+            prestamo.fecha_pago_completo = hoy
             saldo_completado = True
         else:
             prestamo.saldo -= monto_real_cuota
-
+        
         # Registrar la cuota
-        fecha_pago = get_current_date()
+        fecha_pago = hoy
         estado_pago = prestamo.calcular_estado_pago_cuota(fecha_pago)
+        
         nueva_cuota = Cuota(
             prestamo_id=prestamo_id,
             monto=monto_real_cuota,
             fecha_pago=fecha_pago,
-            descripcion=f'Cuota diaria (deuda: {monto_a_deuda_base}, mora: {monto_a_mora})',
+            descripcion=f'Cuota diaria (deuda: {float(monto_a_deuda_base)}, mora: {float(monto_a_mora)})',
             estado_pago=estado_pago
         )
         db.session.add(nueva_cuota)
         
         # Recalcular deuda vencida
         deuda_vencida, deuda_vencida_base, mora_pendiente = prestamo.calcular_deuda_vencida()
-        db.session.commit()
-
+        
         message = f'Cuota registrada exitosamente (deuda base: {monto_a_deuda_base}, mora: {monto_a_mora})'
         if saldo_completado:
             message = '¡PRÉSTAMO PAGADO COMPLETAMENTE! La cuota ha liquidado el saldo pendiente.'
 
-        return jsonify({
+        # Calcular cuota sugerida y mensaje
+        cuota_sugerida = float(deuda_vencida if deuda_vencida > 0 else prestamo.cuota_diaria)
+        mensaje = (
+            f"Deuda vencida (incluye mora): {float(deuda_vencida)} - Se sugiere pagar esta cantidad para ponerse al día."
+        ) if deuda_vencida > 0 else (
+            f"Cliente al día. Cuota diaria sugerida: {float(prestamo.cuota_diaria)}"
+        )
+
+        # Generar respuesta simplificada
+        response_data = {
             'msg': message,
             'prestamo_completado': saldo_completado,
-            'prestamo': prestamo.to_dict(),
-            'cuota': nueva_cuota.to_dict(),
-            'mora_pendiente': float(mora_pendiente)
-        }), 200
+            'saldo_actual': float(prestamo.saldo),
+            'mora_pendiente': float(mora_pendiente),
+            'cuota_sugerida': cuota_sugerida,
+            'mensaje': mensaje
+        }
+
+        db.session.commit()
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         db.session.rollback()

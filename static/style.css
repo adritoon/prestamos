@@ -1097,36 +1097,103 @@ select:focus-visible {
   background-color: #e0e0e0 !important;
 }
 
-/* Estilo para el contenedor del nombre de la empresa */
+/* Estilo para el contenedor del logo de la empresa */
 .company-name {
     text-align: center;
-    margin-bottom: 20px; /* Espacio entre el nombre y el cuadro de login */
+    margin-bottom: 5px; /* Reducido de 10px a 5px */
+    margin-top: 5px; /* Reducido de 10px a 5px */
+    overflow: hidden;
 }
 
-/* Estilo para el título del nombre de la empresa */
-.company-name h1 {
-    font-size: 3em; /* Ligeramente más pequeño para mejor proporción */
-    color: #00bcd4; /* Coincide con el color principal de la paleta */
-    font-weight: bold;
+/* Estilo para el logo de la empresa */
+.company-logo {
+    max-width: 300px;
+    height: auto;
     margin: 0;
-    padding: 10px 0;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3); /* Sombra suave para destacar */
-    transition: transform 0.3s ease; /* Animación suave al interactuar */
+    padding: 5px 0; /* Reducido de 10px 0 a 5px 0 */
+    transition: transform 0.3s ease;
 }
 
-.company-name h1:hover {
-    transform: scale(1.02); /* Efecto sutil de escalado al pasar el mouse */
+.company-logo:hover {
+    transform: scale(1.02);
 }
 
-/* Estilos responsivos para el nombre de la empresa */
+/* Ajustar el margen superior del contenedor de login */
+.login-container {
+    max-width: 350px;
+    margin: 20px auto; /* Reducido el margen superior de 50px a 20px */
+    background: #222;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 0 12px #00bcd4;
+    text-align: center;
+}
+
+/* Estilos responsivos para el logo */
 @media (max-width: 768px) {
-    .company-name h1 {
-        font-size: 2.2em; /* Reducir tamaño en tablets */
+    .company-logo {
+        max-width: 220px;
+        padding: 3px 0; /* Reducido padding en móviles */
+    }
+    
+    .company-name {
+        margin-bottom: 3px; /* Aún menos espacio en móviles */
+    }
+    
+    .login-container {
+        margin: 15px auto; /* Menos margen en móviles */
     }
 }
 
 @media (max-width: 480px) {
-    .company-name h1 {
-        font-size: 1.8em; /* Reducir más en móviles */
+    .company-logo {
+        max-width: 180px;
+        padding: 2px 0; /* Padding mínimo en pantallas pequeñas */
     }
+    
+    .company-name {
+        margin-bottom: 2px;
+    }
+    
+    .login-container {
+        margin: 10px auto;
+    }
+}
+
+.action-btn.primary-btn {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 5px;
+    font-size: 14px;
+}
+
+.action-btn.primary-btn:hover {
+    background-color: #0056b3;
+}
+
+.action-btn i {
+    margin-right: 5px;
+}
+
+.historial-resumen {
+    margin-bottom: 20px;
+}
+
+#historialCuotasTable {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#historialCuotasTable th, #historialCuotasTable td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+#historialCuotasTable th {
+    background-color: #f2f2f2;
 }
