@@ -398,12 +398,26 @@
         <div class="flujo-resumen">
             <div class="card resumen-diario-card">
                 <h3>Resumen del Día</h3>
+                <div class="date-selector-container">
+                    <label for="fechaResumenDiario">Fecha:</label>
+                    <input type="date" id="fechaResumenDiario" required>
+                    <button class="action-btn" onclick="cargarFlujoCaja({ fecha: document.getElementById('fechaResumenDiario').value })">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
                 <p>Ingresos: <span id="ingresosDiarios">S/ 0.00</span></p>
                 <p>Egresos: <span id="egresosDiarios">S/ 0.00</span></p>
                 <p>Balance: <span id="balanceDiario">S/ 0.00</span></p>
             </div>
             <div class="card resumen-mensual-card">
                 <h3>Resumen del Mes</h3>
+                <div class="date-selector-container">
+                    <label for="mesResumen">Mes:</label>
+                    <input type="month" id="mesResumen" required>
+                    <button class="action-btn" onclick="cargarFlujoCaja({ mes: document.getElementById('mesResumen').value })">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
                 <p>Ingresos: <span id="ingresosMensuales">S/ 0.00</span></p>
                 <p>Egresos: <span id="egresosMensuales">S/ 0.00</span></p>
                 <p>Balance: <span id="balanceMensual">S/ 0.00</span></p>

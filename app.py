@@ -897,8 +897,21 @@ def agregar_movimiento():
 def get_flujo_caja():
     """Calcula y devuelve los resúmenes diarios, mensuales y el historial de transacciones."""
     try:
-        hoy = get_current_date()
-        mes_actual = hoy.replace(day=1)
+        #hoy = get_current_date()
+        #mes_actual = hoy.replace(day=1)
+        fecha_param = request.args.get('fecha')  # YYYY-MM-DD
+        mes_param = request.args.get('mes')      # YYYY-MM
+
+        if fecha_param:
+            hoy = datetime.strptime(fecha_param, "%Y-%m-%d").date()
+        else:
+            hoy = get_current_date()
+
+        if mes_param:
+            anio, mes_num = map(int, mes_param.split("-"))
+            mes_actual = date(anio, mes_num, 1)
+        else:
+            mes_actual = hoy.replace(day=1)
 
         # Ingresos: Cuotas pagadas y movimientos administrativos de tipo 'ingreso'
         ingresos_cuotas_hoy = db.session.query(func.sum(Cuota.monto)).filter(
@@ -953,14 +966,47 @@ def get_flujo_caja():
         }
         
         # Historial de transacciones
-        cuotas = db.session.query(Cuota, Cliente)\
-                          .join(Prestamo, Cuota.prestamo_id == Prestamo.id)\
-                          .join(Cliente, Prestamo.cliente_id == Cliente.id)\
-                          .all()
-        prestamos = db.session.query(Prestamo, Cliente)\
-                             .join(Cliente, Prestamo.cliente_id == Cliente.id)\
-                             .all()
-        movimientos_admin = Movimiento.query.all()
+        # --- HISTORIAL ---
+        cuotas_query = db.session.query(Cuota, Cliente)\
+            .join(Prestamo, Cuota.prestamo_id == Prestamo.id)\
+            .join(Cliente, Prestamo.cliente_id == Cliente.id)
+
+        prestamos_query = db.session.query(Prestamo, Cliente)\
+            .join(Cliente, Prestamo.cliente_id == Cliente.id)
+
+        movimientos_query = Movimiento.query
+
+        # 👈 Filtros si hay fecha
+        if fecha_param:
+            # Filtrar solo por la fecha seleccionada
+            cuotas_query = cuotas_query.filter(Cuota.fecha_pago == hoy)
+            prestamos_query = prestamos_query.filter(Prestamo.fecha_inicio == hoy)
+            movimientos_query = movimientos_query.filter(Movimiento.fecha == hoy)
+
+        elif mes_param:
+            # Filtrar por el mes seleccionado
+            cuotas_query = cuotas_query.filter(
+                func.extract('month', Cuota.fecha_pago) == mes_actual.month,
+                func.extract('year', Cuota.fecha_pago) == mes_actual.year
+            )
+            prestamos_query = prestamos_query.filter(
+                func.extract('month', Prestamo.fecha_inicio) == mes_actual.month,
+                func.extract('year', Prestamo.fecha_inicio) == mes_actual.year
+            )
+            movimientos_query = movimientos_query.filter(
+                func.extract('month', Movimiento.fecha) == mes_actual.month,
+                func.extract('year', Movimiento.fecha) == mes_actual.year
+            )
+        else:
+            # 👈 Si no se pasa nada, filtrar por HOY
+            cuotas_query = cuotas_query.filter(Cuota.fecha_pago == hoy)
+            prestamos_query = prestamos_query.filter(Prestamo.fecha_inicio == hoy)
+            movimientos_query = movimientos_query.filter(Movimiento.fecha == hoy)
+
+        # Ejecutar consultas filtradas
+        cuotas = cuotas_query.all()
+        prestamos = prestamos_query.all()
+        movimientos_admin = movimientos_query.all()
 
         # Construir la lista de transacciones sin ordenar
         transacciones_cuotas = [{
@@ -1006,73 +1052,65 @@ def get_flujo_caja():
     except Exception as e:
         return jsonify({'msg': f'Error al generar flujo de caja: {str(e)}'}), 500
 
-@app.route('/api/flujo-caja/exportar', methods=['GET'])
+# NUEVA RUTA API PARA FLUJO DE CAJA
+@app.route('/api/flujo_caja/exportar', methods=['GET'])
 @jwt_required()
-def exportar_flujo_caja_excel():
-    """Exporta el historial completo de transacciones a un archivo CSV."""
+def exportar_flujo_caja_csv():
+    """
+    Exporta los datos de flujo de caja a un archivo CSV (Excel).
+    """
     try:
-        # Aquí puedes usar la misma lógica para obtener las transacciones
-        # que en la ruta get_flujo_caja, pero sin la parte de resumen.
-        # Por simplicidad, se usará la misma lógica que la ruta anterior.
-        cuotas = db.session.query(Cuota, Cliente)\
-                          .join(Prestamo, Cuota.prestamo_id == Prestamo.id)\
-                          .join(Cliente, Prestamo.cliente_id == Cliente.id)\
-                          .all()
-        prestamos = db.session.query(Prestamo, Cliente)\
-                             .join(Cliente, Prestamo.cliente_id == Cliente.id)\
-                             .all()
-        movimientos_admin = Movimiento.query.all()
+        claims = get_jwt()
+        # Puedes añadir una validación de rol si lo necesitas para esta funcionalidad
+        if claims.get('rol') not in ['admin', 'trabajador']:
+            return jsonify({'msg': 'No autorizado'}), 403
 
-        # Construir la lista de transacciones sin ordenar
-        transacciones_cuotas = [{
-            'fecha': c.fecha_pago.isoformat(),
-            'descripcion': f'Pago de cuota de {cliente.nombre} (DNI: {cliente.dni})',
-            'tipo': 'ingreso',
-            'monto': float(c.monto)
-        } for c, cliente in cuotas]
+        # Obtener todos los movimientos y calcular totales
+        movimientos = Movimiento.query.order_by(Movimiento.fecha.desc()).all()
+        total_ingresos = sum(m.monto for m in movimientos if m.tipo == 'ingreso')
+        total_egresos = sum(m.monto for m in movimientos if m.tipo == 'egreso')
+        saldo_actual = total_ingresos - total_egresos
 
-        transacciones_prestamos = []
-        for p, cliente in prestamos:
-            if p.tipo_prestamo == 'CR':
-                transacciones_prestamos.append({
-                    'fecha': p.fecha_inicio.isoformat(),
-                    'descripcion': f'Préstamo otorgado a {cliente.nombre} (DNI: {cliente.dni})',
-                    'tipo': 'egreso',
-                    'monto': float(p.monto_principal)
-                })
-            else:
-                transacciones_prestamos.append({
-                    'fecha': p.fecha_inicio.isoformat(),
-                    'descripcion': f'Refinanciamiento a {cliente.nombre} (DNI: {cliente.dni})',
-                    'tipo': 'refinanciación',
-                    'monto': float(p.monto_principal)
-                })
+        output = StringIO()
+        writer = csv.writer(output, lineterminator='\n')
 
-        transacciones_admin = [{
-            'fecha': m.fecha.isoformat(),
-            'descripcion': m.descripcion,
-            'tipo': m.tipo,
-            'monto': float(m.monto)
-        } for m in movimientos_admin]
+        # Escribir la sección de resumen
+        writer.writerow(['Resumen de Flujo de Caja'])
+        writer.writerow(['Fecha del Reporte', 'Total Ingresos', 'Total Egresos', 'Saldo Actual'])
+        writer.writerow([
+            datetime.now(TIMEZONE).strftime("%Y-%m-%d"),
+            float(total_ingresos),
+            float(total_egresos),
+            float(saldo_actual)
+        ])
+        writer.writerow([])  # Línea en blanco para separar
+
+        # Escribir la sección de historial de movimientos
+        writer.writerow(['Historial de Movimientos'])
+        writer.writerow(['Fecha', 'Tipo', 'Monto', 'Descripción'])
+
+        # Escribir los datos de cada movimiento
+        for m in movimientos:
+            writer.writerow([
+                m.fecha.strftime('%Y-%m-%d'),
+                m.tipo.capitalize(),
+                float(m.monto),
+                m.descripcion or 'Sin descripción'
+            ])
+
+        output.seek(0)
         
-        # Unir todas las listas y ordenar por fecha
-        transacciones = transacciones_cuotas + transacciones_prestamos + transacciones_admin
-        transacciones.sort(key=lambda x: datetime.fromisoformat(x['fecha']), reverse=True)
+        response = make_response(output.read())
+        filename = f'Flujo_de_Caja_{datetime.now(TIMEZONE).strftime("%Y%m%d")}.csv'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        response.headers['Content-Type'] = 'text/csv'
 
-        # Preparar el archivo CSV
-        si = StringIO()
-        cw = csv.writer(si)
-        cw.writerow(['Fecha', 'Descripción', 'Tipo', 'Monto'])
-        for t in transacciones:
-            cw.writerow([t['fecha'], t['descripcion'], t['tipo'], t['monto']])
-
-        output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=flujo_de_caja.csv"
-        output.headers["Content-type"] = "text/csv"
-        return output
+        return response
+    
     except Exception as e:
-        return jsonify({'msg': f'Error al exportar a Excel: {str(e)}'}), 500
-
+        print(f"Error al exportar el flujo de caja: {e}")
+        return jsonify({'msg': 'Error al generar el archivo de exportación'}), 500
+    
 # ---------------- PÁGINAS HTML ----------------
 @app.route('/')
 def login_page():

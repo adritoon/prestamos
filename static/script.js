@@ -902,7 +902,7 @@ async function buscarHistorial(searchText) {
 }
 
 // NUEVAS FUNCIONES PARA FLUJO DE CAJA
-async function cargarFlujoCaja() {
+async function cargarFlujoCaja({ fecha = null, mes = null } = {}) {
     const resumenDiarioIngresos = document.getElementById('ingresosDiarios');
     const resumenDiarioEgresos = document.getElementById('egresosDiarios');
     const resumenDiarioBalance = document.getElementById('balanceDiario');
@@ -912,19 +912,28 @@ async function cargarFlujoCaja() {
     const tableBody = document.querySelector('#flujoCajaTable tbody');
 
     try {
-        const { res, data } = await fetchJSON('/api/flujo-caja');
+        // 👇 construimos la query string
+        let qs = '';
+        if (fecha) {
+            qs = `?fecha=${fecha}`;
+        } else if (mes) {
+            qs = `?mes=${mes}`;
+        }
+
+        const { res, data } = await fetchJSON(`/api/flujo-caja${qs}`);
         if (!res.ok) {
             throw new Error(data?.msg || 'Error al cargar el flujo de caja');
         }
 
         const { resumen_diario, resumen_mensual, historial } = data;
 
-        // Rellenar resúmenes
+        // Rellenar resúmenes diarios
         resumenDiarioIngresos.textContent = formatearMoneda(resumen_diario.ingresos);
         resumenDiarioEgresos.textContent = formatearMoneda(resumen_diario.egresos);
         resumenDiarioBalance.textContent = formatearMoneda(resumen_diario.balance);
         resumenDiarioBalance.style.color = resumen_diario.balance >= 0 ? '#4CAF50' : '#F44336';
         
+        // Rellenar resúmenes mensuales
         resumenMensualIngresos.textContent = formatearMoneda(resumen_mensual.ingresos);
         resumenMensualEgresos.textContent = formatearMoneda(resumen_mensual.egresos);
         resumenMensualBalance.textContent = formatearMoneda(resumen_mensual.balance);
@@ -932,24 +941,23 @@ async function cargarFlujoCaja() {
         
         // Rellenar historial
         tableBody.innerHTML = '';
-        historial.forEach(item => {
-            const tr = document.createElement('tr');
-            let colorClase = '';
-            if (item.tipo === 'ingreso') {
-                colorClase = 'text-green';
-            } else if (item.tipo === 'egreso') {
-                colorClase = 'text-red';
-            } else { // 'refinanciación'
-                colorClase = 'text-yellow';
-            }
-            tr.innerHTML = `
-                <td>${item.fecha}</td>
-                <td>${item.descripcion}</td>
-                <td class="${colorClase}">${item.tipo.toUpperCase()}</td>
-                <td class="${colorClase}">${formatearMoneda(item.monto)}</td>
-            `;
-            tableBody.appendChild(tr);
-        });
+        if (!historial || historial.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No hay transacciones</td></tr>';
+        } else {
+            historial.forEach(item => {
+                const tr = document.createElement('tr');
+                let colorClase = (item.tipo === 'ingreso') ? 'text-green'
+                               : (item.tipo === 'egreso') ? 'text-red'
+                               : 'text-yellow';
+                tr.innerHTML = `
+                    <td>${item.fecha}</td>
+                    <td>${item.descripcion}</td>
+                    <td class="${colorClase}">${item.tipo.toUpperCase()}</td>
+                    <td class="${colorClase}">${formatearMoneda(item.monto)}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
 
     } catch (error) {
         console.error('Error al cargar el flujo de caja:', error);
@@ -990,8 +998,56 @@ async function guardarMovimiento(event) {
     }
 }
 
+// Función para exportar el flujo de caja a Excel
 function exportarFlujoCajaExcel() {
-    window.location.href = '/api/flujo-caja/exportar';
+    // Obtener el contenedor de información del resumen y la tabla
+    const resumenInfo = document.querySelector('.flujo-resumen');
+    const table = document.getElementById('flujoCajaTable');
+    
+    if (!resumenInfo || !table) {
+        alert('No se encontró la información del flujo de caja para exportar.');
+        return;
+    }
+
+    // Clonar los elementos para modificar su contenido sin alterar la página
+    const resumenClon = resumenInfo.cloneNode(true);
+    const tableClon = table.cloneNode(true);
+
+    // Eliminar los botones de los selectores de fecha en el resumen clonado
+    resumenClon.querySelectorAll('.date-selector-container button').forEach(button => {
+        button.remove();
+    });
+
+    // Crear un contenedor HTML para el contenido del archivo
+    let html = `
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                h3 { font-size: 16px; margin-top: 20px; }
+                p { margin: 5px 0; }
+            </style>
+        </head>
+        <body>
+            ${resumenClon.outerHTML}
+            <br>
+            ${tableClon.outerHTML}
+        </body>
+        </html>
+    `;
+
+    // Crear y descargar el archivo
+    const url = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Flujo_de_Caja_${new Date().toISOString().split('T')[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotification('Flujo de caja exportado a Excel correctamente', 'success');
 }
 
 function filtrarClientes(searchText) {
@@ -1064,20 +1120,133 @@ function togglePasswordVisibility() {
 }
 
 function exportarClientesExcel() {
-    const table = document.getElementById('clientesTableAdmin') || document.getElementById('clientesTableTrabajador');
+    // Obtener la tabla de clientes
+    const table = document.getElementById('clientesTableAdmin');
+    
     if (!table) {
-        alert('No se encontró tabla para exportar');
+        alert('No se encontró la tabla de clientes para exportar.');
         return;
     }
-    
-    let html = table.outerHTML;
-    let url = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
-    let a = document.createElement('a');
+
+    // Clonar la tabla para no modificar la original en la página
+    const tableClon = table.cloneNode(true);
+
+    // Encontrar y eliminar la columna 'Acciones' del clon
+    // Primero, encontrar el índice de la columna 'Acciones'
+    let columnIndex = -1;
+    const headers = tableClon.querySelectorAll('thead th');
+    headers.forEach((th, index) => {
+        if (th.textContent.trim() === 'Acciones') {
+            columnIndex = index;
+        }
+    });
+
+    if (columnIndex > -1) {
+        // Eliminar la celda de encabezado
+        tableClon.querySelector('thead tr').children[columnIndex].remove();
+        
+        // Eliminar las celdas de la misma columna en cada fila del cuerpo de la tabla
+        const rows = tableClon.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.children[columnIndex]) {
+                row.children[columnIndex].remove();
+            }
+        });
+    }
+
+    // Crear un contenedor HTML con el clon de la tabla
+    let html = `
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                h3 { font-size: 16px; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h3>Reporte de Clientes</h3>
+            ${tableClon.outerHTML}
+        </body>
+        </html>
+    `;
+
+    // Crear y descargar el archivo
+    const url = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `clientes_prestamos_${new Date().toISOString().split('T')[0]}.xls`;
+    a.download = `Clientes_${new Date().toISOString().split('T')[0]}.xls`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    showNotification('Lista de clientes exportada a Excel correctamente', 'success');
+}
+
+function exportarClientesTrabajadorExcel() {
+    // Obtener la tabla de clientes del trabajador
+    const table = document.getElementById('clientesTableTrabajador');
+    
+    if (!table) {
+        alert('No se encontró la tabla de clientes para exportar.');
+        return;
+    }
+
+    // Clonar la tabla para no modificar la original en la página
+    const tableClon = table.cloneNode(true);
+
+    // Encontrar y eliminar la columna 'Acciones' del clon
+    // Primero, encontrar el índice de la columna 'Acciones'
+    let columnIndex = -1;
+    const headers = tableClon.querySelectorAll('thead th');
+    headers.forEach((th, index) => {
+        if (th.textContent.trim() === 'Acciones') {
+            columnIndex = index;
+        }
+    });
+
+    if (columnIndex > -1) {
+        // Eliminar la celda de encabezado
+        tableClon.querySelector('thead tr').children[columnIndex].remove();
+        
+        // Eliminar las celdas de la misma columna en cada fila del cuerpo de la tabla
+        const rows = tableClon.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.children[columnIndex]) {
+                row.children[columnIndex].remove();
+            }
+        });
+    }
+
+    // Crear un contenedor HTML con el clon de la tabla
+    let html = `
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                table { border-collapse: collapse; width: 100%; }
+                th, td { border: 1px solid black; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                h3 { font-size: 16px; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <h3>Reporte de Clientes</h3>
+            ${tableClon.outerHTML}
+        </body>
+        </html>
+    `;
+
+    // Crear y descargar el archivo
+    const url = 'data:application/vnd.ms-excel,' + encodeURIComponent(html);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Clientes_Trabajador_${new Date().toISOString().split('T')[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showNotification('Lista de clientes exportada a Excel correctamente', 'success');
 }
 
 function showNotification(message, type = 'info') {
@@ -1594,6 +1763,8 @@ function actualizarRefinanciarCuotaDiaria() {
         cuotaDiariaDisplay.textContent = formatearMoneda(cuotaDiaria);
     }
 }
+
+
 
 // FUNCIONES GLOBALES ADICIONALES
 window.addEventListener('error', function(event) {
