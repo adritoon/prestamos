@@ -520,7 +520,7 @@ def ejecutar_migracion_completa():
     print("=" * 60)
     print("\n📋 INFORMACIÓN DEL SISTEMA:")
     print("Credenciales de acceso:")
-    print("  👨‍💼 Administrador - Usuario: admin, Contraseña: admin123")
+    print("  👨‍💼 Administrador - Usuario: admin, Contraseña: adrian0921")
     print("  👨‍🔧 Trabajador - Usuario: trabajador, Contraseña: trabajo123")
     
     print("\n🚀 Características del nuevo sistema:")
