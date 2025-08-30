@@ -80,7 +80,8 @@
                     <!-- Datos se cargan dinámicamente -->
                 </tbody>
             </table>
-        </div>
+        </div><div id="pagination-container" class="pagination">
+            </div>
     </section>
 
     <!-- PESTAÑA DE TRABAJADORES -->
@@ -314,6 +315,7 @@
             <h2>Registrar Cuota</h2>
             <form id="cuotaForm">
                 <input type="hidden" id="cuotaPrestamoId" />
+                <input type="hidden" id="cuotaId" /> 
                 
                 <div id="cuotaSugerencia" class="sugerencia-info">
                     <i class="fas fa-info-circle"></i>
@@ -378,10 +380,12 @@
                 <table id="historialCuotasTable">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Fecha</th>
                             <th>Monto</th>
                             <th>Descripción</th>
                             <th>Estado del Pago</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -390,8 +394,20 @@
                 </table>
             </div>
         </div>
+        
     </div>
-
+    <div id="editCuotaModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="cerrarModalEditarCuota()">&times;</span>
+                <h2>Editar Cuota</h2>
+                <form id="formEditCuota">
+                    <input type="hidden" id="editCuotaId" name="cuota_id">
+                    <label for="editFechaPago">Nueva Fecha de Pago:</label>
+                    <input type="date" id="editFechaPago" name="fecha_pago" required>
+                    <button type="submit">Guardar Cambios</button>
+                </form>
+            </div>
+        </div>
     <section id="flujoCajaTab" class="tab-content">
         <h2>Flujo de Caja</h2>
 

@@ -104,30 +104,38 @@ function getEstadoPagoText(estadoPago) {
 }
 
 // ---- FUNCIONES PARA CARGAR DATOS ----
-async function cargarClientesAdmin() {
+// REEMPLAZA LA FUNCIÓN COMPLETA
+async function cargarClientesAdmin(page = 1) {
     const tBody = document.querySelector('#clientesTableAdmin tbody');
     if (!tBody) return;
 
+    // Añadimos un indicador de carga para mejorar la UX
+    tBody.innerHTML = '<tr><td colspan="18" class="text-center">Cargando clientes...</td></tr>';
+
     try {
-        const { res, data } = await fetchJSON('/api/clientes');
+        // La URL ahora incluye la página que queremos cargar
+        const { res, data } = await fetchJSON(`/api/clientes?page=${page}&per_page=10`);
         if (!res.ok) {
             console.error('Error al cargar clientes:', data?.msg || res.statusText);
-            tBody.innerHTML = '<tr><td colspan="17">Error al cargar clientes.</td></tr>';
+            tBody.innerHTML = '<tr><td colspan="18">Error al cargar clientes.</td></tr>';
             return;
         }
 
-        tBody.innerHTML = '';
-        
-        if (data.length === 0) {
+        tBody.innerHTML = ''; // Limpiamos la tabla antes de añadir nuevos datos
+
+        // Ahora los clientes están dentro de data.clientes
+        if (data.clientes.length === 0) {
             tBody.innerHTML = '<tr><td colspan="18" class="text-center">No hay clientes con préstamos activos.</td></tr>';
+            document.getElementById('pagination-container').innerHTML = ''; // Limpiar paginación si no hay resultados
             return;
         }
 
-        data.forEach(cliente => {
+        data.clientes.forEach(cliente => {
+            // ... Aquí va EXACTAMENTE el mismo código que ya tenías para crear la fila (tr) ...
+            // ... No necesitas cambiar nada de esa lógica ...
             if (cliente.prestamos && cliente.prestamos.length > 0) {
                 cliente.prestamos.forEach(prestamo => {
                     const tr = document.createElement('tr');
-                    
                     // Calcular clase de alerta por fecha de vencimiento y estado
                     let claseAlerta = '';
                     let diasRestantes = 'N/A';
@@ -163,7 +171,7 @@ async function cargarClientesAdmin() {
                         <td>${formatearMoneda(prestamo.monto_principal)}</td>
                         <td><strong>${formatearMoneda(prestamo.monto_total)}</strong></td>
                         <td>${formatearMoneda(prestamo.saldo)}</td>
-                        <td>${iconoTipo} ${prestamo.tipo_prestamo}</td>
+                        <td><i class="${prestamo.tipo_prestamo === 'REF' ? 'fas fa-redo-alt' : 'fas fa-plus-circle'}" title="${prestamo.tipo_prestamo === 'REF' ? 'Refinanciación' : 'Crédito Reciente'}"></i> ${prestamo.tipo_prestamo}</td>
                         <td>${prestamo.tipo_frecuencia || 'Diario'}</td>
                         <td><span class="badge">${prestamo.dt || 0}</span></td>
                         <td>${prestamo.total_cuotas || 0}</td>
@@ -173,26 +181,14 @@ async function cargarClientesAdmin() {
                         <td><span class="${getEstadoBadgeClass(prestamo.estado)}">${prestamo.estado.toUpperCase()}</span></td>
                         <td class="actions-cell">
                             <div class="action-buttons">
-                                <button class="action-btn" onclick="abrirEditClienteModal(${cliente.id}, '${cliente.nombre}', '${cliente.direccion}', '${cliente.telefono}', ${cliente.trabajador_id || 'null'})" title="Editar Cliente">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-btn delete-btn" onclick="eliminarCliente(${cliente.id})" title="Eliminar Cliente">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
+                                <button class="action-btn" onclick="abrirEditClienteModal(${cliente.id}, '${cliente.nombre}', '${cliente.direccion}', '${cliente.telefono}', ${cliente.trabajador_id || 'null'})" title="Editar Cliente"><i class="fas fa-edit"></i></button>
+                                <button class="action-btn delete-btn" onclick="eliminarCliente(${cliente.id})" title="Eliminar Cliente"><i class="fas fa-trash-alt"></i></button>
                                 ${prestamo.estado === 'activo' || prestamo.estado === 'vencido' ? `
-                                <button class="action-btn success-btn" onclick="marcarPrestamoComoPagado(${prestamo.id})" title="Marcar como Pagado">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                <button class="action-btn primary-btn" onclick="abrirModalCuota(${prestamo.id})" title="Registrar Cuota">
-                                    <i class="fas fa-dollar-sign"></i>
-                                </button>
-                                <button class="action-btn warning-btn" onclick="abrirModalRefinanciar(${prestamo.id})" title="Refinanciar">
-                                    <i class="fas fa-redo"></i>
-                                </button>
+                                <button class="action-btn success-btn" onclick="marcarPrestamoComoPagado(${prestamo.id})" title="Marcar como Pagado"><i class="fas fa-check"></i></button>
+                                <button class="action-btn primary-btn" onclick="abrirModalCuota(${prestamo.id})" title="Registrar Cuota"><i class="fas fa-dollar-sign"></i></button>
+                                <button class="action-btn warning-btn" onclick="abrirModalRefinanciar(${prestamo.id})" title="Refinanciar"><i class="fas fa-redo"></i></button>
                                 ` : ''}
-                                <button class="action-btn info-btn" onclick="verHistorialCuotas(${prestamo.id})" title="Ver Cuotas">
-                                    <i class="fas fa-history"></i>
-                                </button>
+                                <button class="action-btn info-btn" onclick="verHistorialCuotas(${prestamo.id})" title="Ver Cuotas"><i class="fas fa-history"></i></button>
                             </div>
                         </td>
                     `;
@@ -200,52 +196,114 @@ async function cargarClientesAdmin() {
                 });
             }
         });
+
+        // Después de llenar la tabla, generamos los botones de paginación
+        renderPagination(data);
+
     } catch (error) {
         console.error('Error al cargar clientes:', error);
-        tBody.innerHTML = '<tr><td colspan="17">Error de conexión al servidor.</td></tr>';
+        tBody.innerHTML = '<tr><td colspan="18">Error de conexión al servidor.</td></tr>';
     }
 }
 
-async function cargarClientesTrabajador() {
+function renderPagination(paginationData) {
+    const { total_pages, current_page, has_prev, has_next } = paginationData;
+    const container = document.getElementById('pagination-container');
+    container.innerHTML = ''; // Limpiar botones anteriores
+
+    if (total_pages <= 1) return; // No mostrar si solo hay una página
+
+    // Botón "Anterior"
+    const prevButton = document.createElement('button');
+    prevButton.innerHTML = '&laquo; Anterior';
+    prevButton.disabled = !has_prev;
+    prevButton.onclick = () => cargarClientesAdmin(current_page - 1);
+    container.appendChild(prevButton);
+
+    // Lógica para mostrar números de página (ej. 1, 2, ..., 5, 6, 7, ..., 10, 11)
+    for (let i = 1; i <= total_pages; i++) {
+        // Simplificado: muestra todos los números. Para muchas páginas, esto se puede mejorar.
+        const pageButton = document.createElement('button');
+        pageButton.innerText = i;
+        if (i === current_page) {
+            pageButton.classList.add('active');
+        }
+        pageButton.onclick = () => cargarClientesAdmin(i);
+        container.appendChild(pageButton);
+    }
+
+    // Botón "Siguiente"
+    const nextButton = document.createElement('button');
+    nextButton.innerHTML = 'Siguiente &raquo;';
+    nextButton.disabled = !has_next;
+    nextButton.onclick = () => cargarClientesAdmin(current_page + 1);
+    container.appendChild(nextButton);
+}
+
+function renderPaginationTrabajador(paginationData) {
+    const { total_pages, current_page, has_prev, has_next } = paginationData;
+    const container = document.getElementById('pagination-container-trabajador');
+    container.innerHTML = ''; 
+
+    if (total_pages <= 1) return;
+
+    const prevButton = document.createElement('button');
+    prevButton.innerHTML = '&laquo; Anterior';
+    prevButton.disabled = !has_prev;
+    prevButton.onclick = () => cargarClientesTrabajador(current_page - 1);
+    container.appendChild(prevButton);
+
+    for (let i = 1; i <= total_pages; i++) {
+        const pageButton = document.createElement('button');
+        pageButton.innerText = i;
+        if (i === current_page) {
+            pageButton.classList.add('active');
+        }
+        pageButton.onclick = () => cargarClientesTrabajador(i);
+        container.appendChild(pageButton);
+    }
+
+    const nextButton = document.createElement('button');
+    nextButton.innerHTML = 'Siguiente &raquo;';
+    nextButton.disabled = !has_next;
+    nextButton.onclick = () => cargarClientesTrabajador(current_page + 1);
+    container.appendChild(nextButton);
+}
+
+async function cargarClientesTrabajador(page = 1) {
     const tBody = document.querySelector('#clientesTableTrabajador tbody');
     if (!tBody) return;
 
+    tBody.innerHTML = '<tr><td colspan="17" class="text-center">Cargando clientes...</td></tr>';
+
     try {
-        const { res, data } = await fetchJSON('/api/clientes');
+        const { res, data } = await fetchJSON(`/api/trabajador/clientes?page=${page}&per_page=10`);
         if (!res.ok) {
-            console.error('Error al cargar clientes:', data?.msg || res.statusText);
-            tBody.innerHTML = '<tr><td colspan="17">Error al cargar clientes.</td></tr>';
+            tBody.innerHTML = `<tr><td colspan="17">Error al cargar clientes: ${data?.msg || res.statusText}</td></tr>`;
             return;
         }
 
         tBody.innerHTML = '';
         
-        if (data.length === 0) {
-            tBody.innerHTML = '<tr><td colspan="17" class="text-center">No hay clientes con préstamos activos.</td></tr>';
+        if (data.clientes.length === 0) {
+            tBody.innerHTML = '<tr><td colspan="17" class="text-center">No tienes clientes asignados con préstamos activos.</td></tr>';
+            document.getElementById('pagination-container-trabajador').innerHTML = '';
             return;
         }
 
-        data.forEach(cliente => {
+        data.clientes.forEach(cliente => {
+            // (El código que crea cada fila de la tabla sigue igual que antes)
             if (cliente.prestamos && cliente.prestamos.length > 0) {
                 cliente.prestamos.forEach(prestamo => {
                     const tr = document.createElement('tr');
-                    
+                    // ... tu código tr.innerHTML completo aquí ...
                     let claseAlerta = '';
-                    if (prestamo.fecha_fin) {
-                        const fechaHoy = new Date();
-                        const fechaFin = new Date(prestamo.fecha_fin);
-                        const diferenciaMs = fechaFin.getTime() - fechaHoy.getTime();
-                        const diasRestantes = Math.ceil(diferenciaMs / (1000 * 60 * 60 * 24));
-                        
-                        if (prestamo.estado === 'vencido') {
-                            claseAlerta = 'alerta-vencido';
-                        } else if (diasRestantes < 0) {
-                            claseAlerta = 'alerta-vencido';
-                        } else if (diasRestantes <= 3) {
-                            claseAlerta = 'alerta-rojo';
-                        } else if (diasRestantes <= 10) {
-                            claseAlerta = 'alerta-amarillo';
-                        }
+                    if (prestamo.estado === 'vencido') {
+                        claseAlerta = 'alerta-vencido';
+                    } else if (prestamo.fecha_fin) {
+                        const diasRestantes = calcularDiasEntreFechas(new Date(), prestamo.fecha_fin);
+                        if (diasRestantes <= 3) claseAlerta = 'alerta-rojo';
+                        else if (diasRestantes <= 10) claseAlerta = 'alerta-amarillo';
                     }
                     
                     const iconoTipo = prestamo.tipo_prestamo === 'REF' ? 
@@ -263,7 +321,7 @@ async function cargarClientesTrabajador() {
                         <td>${formatearMoneda(prestamo.monto_principal)}</td>
                         <td><strong>${formatearMoneda(prestamo.monto_total)}</strong></td>
                         <td>${formatearMoneda(prestamo.saldo)}</td>
-                        <td>${iconoTipo} ${prestamo.tipo_prestamo}</td>
+                        <td><i class="${prestamo.tipo_prestamo === 'REF' ? 'fas fa-redo-alt' : 'fas fa-plus-circle'}" title="${prestamo.tipo_prestamo === 'REF' ? 'Refinanciación' : 'Crédito Reciente'}"></i> ${prestamo.tipo_prestamo}</td>
                         <td>${prestamo.tipo_frecuencia || 'Diario'}</td>
                         <td><span class="badge">${prestamo.dt || 0}</span></td>
                         <td>${prestamo.total_cuotas || 0}</td>
@@ -287,9 +345,13 @@ async function cargarClientesTrabajador() {
                 });
             }
         });
+
+        // Llamamos a la nueva función para dibujar los botones
+        renderPaginationTrabajador(data);
+
     } catch (error) {
-        console.error('Error al cargar clientes:', error);
-        tBody.innerHTML = '<tr><td colspan="16">Error de conexión al servidor.</td></tr>';
+        console.error('Error al cargar clientes del trabajador:', error);
+        tBody.innerHTML = '<tr><td colspan="17">Error de conexión al servidor.</td></tr>';
     }
 }
 
@@ -461,7 +523,8 @@ async function verHistorialCuotas(prestamoId) {
     try {
         const { res, data } = await fetchJSON(`/api/prestamos/${prestamoId}/cuotas`);
         if (res.ok) {
-            mostrarHistorialCuotas(data);
+            // Llama a la función para actualizar y mostrar el modal
+            mostrarHistorialCuotas(data, true); 
         } else {
             alert('Error al cargar el historial de cuotas');
         }
@@ -471,13 +534,22 @@ async function verHistorialCuotas(prestamoId) {
     }
 }
 
-function mostrarHistorialCuotas(data) {
+function mostrarHistorialCuotas(data, mostrarModal = true) {
     const modal = document.getElementById('historialCuotasModal');
     const tbody = document.querySelector('#historialCuotasTable tbody');
     const totalPagado = document.getElementById('totalPagadoCuotas');
     const prestamoInfo = document.getElementById('prestamoInfoHistorial');
+
+    // Almacenar el ID del préstamo para usarlo después
+    const prestamoIdHidden = document.getElementById('historialPrestamoId') || document.createElement('span');
+    prestamoIdHidden.id = 'historialPrestamoId';
+    prestamoIdHidden.style.display = 'none';
+    prestamoIdHidden.textContent = data.prestamo_id;
+    if (!document.getElementById('historialPrestamoId')) {
+        document.body.appendChild(prestamoIdHidden);
+    }
     
-    // Mostrar información del préstamo
+    // ... (El resto del código que llena la tabla y la información del préstamo sigue igual)
     if (prestamoInfo && data.prestamo_info) {
         prestamoInfo.innerHTML = `
             <h4>Préstamo de ${data.prestamo_info.cliente_nombre}</h4>
@@ -490,26 +562,39 @@ function mostrarHistorialCuotas(data) {
             </button>
         `;
     }
-    
+
     tbody.innerHTML = '';
-    
+
     if (data.cuotas && data.cuotas.length > 0) {
         data.cuotas.forEach(cuota => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
+                <td>${cuota.id}</td>
                 <td>${cuota.fecha_pago}</td>
                 <td>${formatearMoneda(cuota.monto)}</td>
                 <td>${cuota.descripcion || 'Cuota diaria'}</td>
                 <td><span class="${getEstadoPagoBadgeClass(cuota.estado_pago)}">${getEstadoPagoText(cuota.estado_pago)}</span></td>
+                <td>
+                    <button class="action-btn" onclick="abrirModalEditarCuota(${cuota.id}, '${cuota.fecha_pago}')" title="Editar Fecha">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="action-btn delete-btn" onclick="eliminarCuota(${cuota.id})" title="Eliminar Cuota">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
             `;
             tbody.appendChild(tr);
         });
     } else {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">No hay cuotas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No hay cuotas registradas</td></tr>';
     }
-    
+
     totalPagado.textContent = formatearMoneda(data.total_pagado || 0);
-    modal.style.display = 'block';
+    
+    // Esta es la parte clave: solo mostramos el modal si se nos indica
+    if (mostrarModal) {
+        modal.style.display = 'block';
+    }
 }
 
 function cerrarHistorialCuotas() {
@@ -517,7 +602,7 @@ function cerrarHistorialCuotas() {
 }
 
 function exportarCuotasXLS(prestamoId) {
-    // Obtener el contenedor de información del préstamo y la tabla de cuotas
+    // Obtener los elementos originales
     const prestamoInfo = document.getElementById('prestamoInfoHistorial');
     const table = document.getElementById('historialCuotasTable');
     const totalPagado = document.getElementById('totalPagadoCuotas');
@@ -526,6 +611,42 @@ function exportarCuotasXLS(prestamoId) {
         alert('No se encontró información para exportar');
         return;
     }
+
+    // --- INICIO DE LA MODIFICACIÓN ---
+
+    // 1. Clonamos los elementos para no modificar la vista actual
+    const prestamoInfoClon = prestamoInfo.cloneNode(true);
+    const tableClon = table.cloneNode(true);
+
+    // 2. (Opcional, pero recomendado) Quitamos el botón de exportar del propio reporte
+    const botonExportar = prestamoInfoClon.querySelector('button');
+    if (botonExportar) {
+        botonExportar.remove();
+    }
+
+    // 3. Encontrar y eliminar la columna 'Acciones' del clon de la tabla
+    let columnIndex = -1;
+    const headers = tableClon.querySelectorAll('thead th');
+    headers.forEach((th, index) => {
+        if (th.textContent.trim() === 'Acciones') {
+            columnIndex = index;
+        }
+    });
+
+    if (columnIndex > -1) {
+        // Eliminar la celda del encabezado
+        tableClon.querySelector('thead tr').children[columnIndex].remove();
+        
+        // Eliminar las celdas de la misma columna en cada fila del cuerpo
+        const rows = tableClon.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            if (row.children[columnIndex]) {
+                row.children[columnIndex].remove();
+            }
+        });
+    }
+
+    // --- FIN DE LA MODIFICACIÓN ---
 
     // Crear un contenedor HTML para el contenido del archivo
     let html = `
@@ -541,9 +662,9 @@ function exportarCuotasXLS(prestamoId) {
             </style>
         </head>
         <body>
-            ${prestamoInfo.innerHTML}
+            ${prestamoInfoClon.innerHTML}
             <br>
-            ${table.outerHTML}
+            ${tableClon.outerHTML}
             <p><strong>Total Pagado:</strong> ${totalPagado.textContent}</p>
         </body>
         </html>
@@ -808,7 +929,7 @@ async function eliminarCliente(id) {
     try {
         const { res, data } = await fetchJSON(`/api/clientes/${id}`, 'DELETE');
         if (res.ok) {
-            await cargarClientesAdmin();
+            await cargarClientesAdmin(1);
             await cargarResumenCreditos();
             showNotification('Cliente eliminado correctamente', 'success');
         } else {
@@ -1644,7 +1765,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // CONFIGURACIÓN PARA PÁGINA DE TRABAJADOR
     if (currentPath === '/trabajador') {
-        await cargarClientesTrabajador();
+        await cargarClientesTrabajador(1);
         await cargarResumenCreditos();
 
         const cuotaForm = document.getElementById('cuotaForm');
@@ -1683,6 +1804,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
     }
+
+    // VINCULAR EL FORMULARIO DE EDITAR CUOTA (PARA AMBAS PÁGINAS)
+    const formEditCuota = document.getElementById('formEditCuota');
+    if (formEditCuota) {
+        formEditCuota.addEventListener('submit', editarCuota);
+    }
+
 
     // EVENT LISTENER PARA CERRAR SESIÓN
     const btnCerrarSesion = document.getElementById('btnCerrarSesion');
@@ -1764,7 +1892,99 @@ function actualizarRefinanciarCuotaDiaria() {
     }
 }
 
+// --- FUNCIONES PARA EDITAR/ELIMINAR CUOTAS ---
+function abrirModalEditarCuota(cuotaId, fechaActual) {
+    document.getElementById('editCuotaId').value = cuotaId;
+    document.getElementById('editFechaPago').value = fechaActual;
+    document.getElementById('editCuotaModal').style.display = 'flex';
+}
 
+function cerrarModalEditarCuota() {
+    document.getElementById('editCuotaModal').style.display = 'none';
+    document.getElementById('formEditCuota').reset();
+}
+
+async function editarCuota(event) {
+    event.preventDefault();
+    const cuotaId = document.getElementById('editCuotaId').value;
+    const nuevaFecha = document.getElementById('editFechaPago').value;
+
+    if (!cuotaId || !nuevaFecha) {
+        alert("Falta el ID de la cuota o la nueva fecha.");
+        return;
+    }
+
+    if (confirm(`¿Estás seguro de que deseas cambiar la fecha de la cuota #${cuotaId} a ${nuevaFecha}?`)) {
+        try {
+            const { res, data } = await fetchJSON(`/api/cuotas/${cuotaId}`, 'PUT', { fecha_pago: nuevaFecha });
+
+            if (res.ok) {
+                alert("Cuota actualizada correctamente.");
+                cerrarModalEditarCuota();
+                // Recargar el historial para reflejar el cambio
+                const prestamoId = data.cuota.prestamo_id;
+                verHistorialCuotas(prestamoId);
+            } else {
+                alert("Error al editar la cuota: " + (data?.msg || res.statusText));
+            }
+        } catch (error) {
+            console.error('Error al editar cuota:', error);
+            alert("Error de conexión al servidor.");
+        }
+    }
+}
+
+async function eliminarCuota(id) {
+    if (confirm("¿Estás seguro de que quieres eliminar esta cuota? Esta acción es irreversible.")) {
+        try {
+            // Obtener el ID del préstamo desde el elemento oculto
+            const prestamoId = document.getElementById('historialPrestamoId')?.textContent;
+            if (!prestamoId) {
+                alert("Error: No se pudo encontrar el ID del préstamo asociado para actualizar la vista.");
+                return;
+            }
+
+            const url = `${API_BASE_URL}/api/cuotas/${id}`;
+            const { res, data } = await fetchJSON(url, 'DELETE');
+            
+            if (res.ok) {
+                showNotification("Cuota eliminada exitosamente.", 'success');
+                
+                // ¡AQUÍ ESTÁ LA MAGIA! Llamamos a la función que solo refresca
+                await refrescarContenidoHistorialCuotas(prestamoId);
+                
+                // Actualizar también las tablas y resúmenes principales
+                if(window.location.pathname === '/admin') {
+                    await cargarClientesAdmin();
+                } else if(window.location.pathname === '/trabajador') {
+                    await cargarClientesTrabajador();
+                }
+                await cargarResumenCreditos();
+
+            } else {
+                alert(data.msg || "Error al eliminar la cuota.");
+            }
+        } catch (error) {
+            console.error("Error al eliminar cuota:", error);
+            alert("Error de conexión. Intente de nuevo.");
+        }
+    }
+}
+
+async function refrescarContenidoHistorialCuotas(prestamoId) {
+    try {
+        const { res, data } = await fetchJSON(`/api/prestamos/${prestamoId}/cuotas`);
+        if (res.ok) {
+            // Pasamos los datos a la función que SÍ actualiza el HTML
+            mostrarHistorialCuotas(data, false); // El 'false' es para que no vuelva a mostrar el modal
+        } else {
+            alert('Error al recargar el historial de cuotas');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexión al servidor');
+    }
+}
 
 // FUNCIONES GLOBALES ADICIONALES
 window.addEventListener('error', function(event) {
@@ -1830,3 +2050,5 @@ window.cerrarModalMovimiento = cerrarModalMovimiento;
 window.exportarFlujoCajaExcel = exportarFlujoCajaExcel;
 window.guardarMovimiento = guardarMovimiento;
 window.cargarFlujoCaja = cargarFlujoCaja;
+
+document.getElementById('formEditCuota').addEventListener('submit', editarCuota);

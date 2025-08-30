@@ -1158,12 +1158,30 @@ def trabajador_page():
 def api_clientes():
     actualizar_prestamos_activos()
     
-    clientes_bd = Cliente.query.all()
+    # 1. Obtener los parámetros de la página desde la URL (ej: /api/clientes?page=2&per_page=15)
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int) # Mostraremos 15 clientes por página
+
+    # 2. Crear la consulta base para clientes con préstamos activos o vencidos
+    #    Usamos .distinct() para no contar un cliente varias veces si tuviera múltiples préstamos.
+    base_query = Cliente.query.join(Cliente.prestamos).filter(
+        Prestamo.estado.in_(['activo', 'vencido'])
+    )
+
+    # 3. Ejecutar la consulta con paginación usando SQLAlchemy
+    #    Esto automáticamente calcula el OFFSET y LIMIT en la base de datos.
+    paginated_clientes = base_query.order_by(Prestamo.dt.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    # El objeto 'paginated_clientes' ahora contiene los clientes de la página actual
+    # y mucha información útil sobre la paginación.
+    clientes_de_la_pagina = paginated_clientes.items
+    
+    # 4. Preparar la lista de clientes para la respuesta JSON
     clientes_con_prestamos_activos = []
-
-    for cliente in clientes_bd:
+    for cliente in clientes_de_la_pagina:
         prestamos_activos = [p for p in cliente.prestamos if p.estado in ['activo', 'vencido']]
-
         if prestamos_activos:
             cliente_data = {
                 'id': cliente.id,
@@ -1183,8 +1201,82 @@ def api_clientes():
             }
             clientes_con_prestamos_activos.append(cliente_data)
 
-    return jsonify(clientes_con_prestamos_activos), 200
+    # 5. Devolver una respuesta estructurada con los datos y la información de paginación
+    return jsonify({
+        'clientes': clientes_con_prestamos_activos,
+        'total_pages': paginated_clientes.pages,
+        'current_page': paginated_clientes.page,
+        'has_next': paginated_clientes.has_next,
+        'has_prev': paginated_clientes.has_prev,
+        'total_clientes': paginated_clientes.total
+    }), 200
 
+@app.route('/api/trabajador/clientes', methods=['GET'])
+@jwt_required()
+def api_trabajador_clientes():
+    """
+    Devuelve una lista paginada de todos los clientes asignados
+    al trabajador que ha iniciado sesión.
+    """
+    actualizar_prestamos_activos()
+    
+    # --- INICIO DE CAMBIOS ---
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    
+    username = get_jwt_identity()
+    trabajador = Usuario.query.filter_by(username=username).first()
+
+    if not trabajador:
+        return jsonify({'msg': 'Token válido, pero el usuario trabajador no fue encontrado.'}), 404
+    
+    if trabajador.rol not in ['trabajador', 'admin']:
+         return jsonify({'msg': 'Acceso no autorizado para este rol.'}), 403
+
+    # Creamos la consulta base, igual que antes
+    base_query = Cliente.query.join(Cliente.prestamos).filter(
+        Cliente.trabajador_id == trabajador.id,
+        Prestamo.estado.in_(['activo', 'vencido'])
+    )
+
+    # Aplicamos el ordenamiento y la paginación
+    paginated_query = base_query.order_by(Prestamo.dt.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    clientes_de_la_pagina = paginated_query.items
+    # --- FIN DE CAMBIOS ---
+
+    clientes_con_prestamos_activos = []
+    # (El resto del bucle para procesar los clientes sigue igual)
+    clientes_procesados = set()
+    for cliente in clientes_de_la_pagina:
+        if cliente.id in clientes_procesados:
+            continue
+        clientes_procesados.add(cliente.id)
+        
+        prestamos_activos = [p for p in cliente.prestamos if p.estado in ['activo', 'vencido']]
+        if prestamos_activos:
+            cliente_data = {
+                'id': cliente.id,
+                'nombre': cliente.nombre,
+                'dni': cliente.dni,
+                'direccion': cliente.direccion,
+                'telefono': cliente.telefono,
+                'prestamos': [p.to_dict() for p in prestamos_activos],
+                'trabajador_nombre': trabajador.nombre or trabajador.username
+            }
+            clientes_con_prestamos_activos.append(cliente_data)
+            
+    # Devolvemos la respuesta en el formato de paginación
+    return jsonify({
+        'clientes': clientes_con_prestamos_activos,
+        'total_pages': paginated_query.pages,
+        'current_page': paginated_query.page,
+        'has_next': paginated_query.has_next,
+        'has_prev': paginated_query.has_prev,
+        'total_clientes': paginated_query.total
+    }), 200
 
 @app.route('/api/clientes_sin_prestamo', methods=['GET'])
 @jwt_required()
@@ -1488,6 +1580,88 @@ def refinanciar_prestamo(prestamo_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'msg': 'Error al crear el cliente y el préstamo', 'error': str(e)}), 500
-                        
+
+# Rutas para editar y eliminar cuotas
+@app.route('/api/cuotas/<int:cuota_id>', methods=['PUT'])
+@jwt_required()
+def editar_cuota(cuota_id):
+    """
+    Edita la fecha de una cuota existente y recalcula el estado del préstamo.
+    """
+    claims = get_jwt()
+    if claims.get('rol') not in ['admin', 'trabajador']:
+        return jsonify({'msg': 'No autorizado'}), 403
+    
+    data = request.get_json()
+    nueva_fecha_str = data.get('fecha_pago')
+    
+    if not nueva_fecha_str:
+        return jsonify({'msg': 'Fecha de pago es obligatoria'}), 400
+
+    try:
+        nueva_fecha = date.fromisoformat(nueva_fecha_str)
+        cuota = db.session.get(Cuota, cuota_id)
+        if not cuota:
+            return jsonify({'msg': 'Cuota no encontrada'}), 404
+        
+        prestamo = cuota.prestamo
+        
+        # 1. Actualizar la fecha y recalcular el estado de la cuota
+        cuota.fecha_pago = nueva_fecha
+        cuota.estado_pago = prestamo.calcular_estado_pago_cuota(nueva_fecha)
+        
+        # 2. Recalcular el estado completo del préstamo
+        #    Estas funciones ya se encargan de actualizar saldo, deuda vencida, estado, etc.
+        prestamo.calcular_dias_transcurridos()
+        prestamo.calcular_deuda_vencida()
+
+        db.session.commit()
+        
+        return jsonify({
+            'msg': 'Cuota editada y préstamo actualizado correctamente', 
+            'cuota': cuota.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'msg': f'Error al editar la cuota: {str(e)}'}), 500
+    
+@app.route('/api/cuotas/<int:cuota_id>', methods=['DELETE'])
+@jwt_required()
+def eliminar_cuota(cuota_id):
+    """
+    Elimina una cuota y revierte el monto pagado al saldo del préstamo.
+    """
+    claims = get_jwt()
+    if claims.get('rol') not in ['admin', 'trabajador']:
+        return jsonify({'msg': 'No autorizado'}), 403
+
+    cuota = db.session.get(Cuota, cuota_id)
+    if not cuota:
+        return jsonify({'msg': 'Cuota no encontrada'}), 404
+    
+    prestamo = cuota.prestamo
+    monto_revertido = cuota.monto
+
+    try:
+        # Revertir el monto de la cuota al saldo del préstamo
+        prestamo.saldo += monto_revertido
+        prestamo.estado = 'activo' if prestamo.estado == 'pagado' else prestamo.estado
+        prestamo.fecha_pago_completo = None
+
+        db.session.delete(cuota)
+        db.session.commit()
+        
+        # Recalcular deuda vencida y días transcurridos después de la reversión
+        prestamo.calcular_dias_transcurridos()
+        prestamo.calcular_deuda_vencida()
+        db.session.commit()
+        
+        return jsonify({'msg': 'Cuota eliminada y préstamo actualizado'}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'msg': 'Error al eliminar la cuota', 'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

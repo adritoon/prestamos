@@ -61,7 +61,8 @@
                     <!-- Datos se cargan dinámicamente -->
                 </tbody>
             </table>
-        </div>
+        </div></div> <div id="pagination-container-trabajador" class="pagination">
+            </div>
     </section>
 
     <!-- MODAL: REGISTRAR CUOTA -->
@@ -98,6 +99,8 @@
         <div class="modal-content">
             <span class="close-btn" onclick="cerrarHistorialCuotas()">&times;</span>
             <h2>Historial de Cuotas</h2>
+            <div id="prestamoInfoHistorial" class="historial-resumen">
+                </div>
             
             <div class="historial-resumen">
                 <p><strong>Total Pagado:</strong> <span id="totalPagadoCuotas">S/ 0.00</span></p>
@@ -107,10 +110,12 @@
                 <table id="historialCuotasTable">
                     <thead>
                         <tr>
+                            <th>ID</th>
                             <th>Fecha</th>
                             <th>Monto</th>
                             <th>Descripción</th>
                             <th>Estado del Pago</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -120,6 +125,18 @@
             </div>
         </div>
     </div>
+    <div id="editCuotaModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="cerrarModalEditarCuota()">&times;</span>
+                <h2>Editar Cuota</h2>
+                <form id="formEditCuota">
+                    <input type="hidden" id="editCuotaId" name="cuota_id">
+                    <label for="editFechaPago">Nueva Fecha de Pago:</label>
+                    <input type="date" id="editFechaPago" name="fecha_pago" required>
+                    <button type="submit">Guardar Cambios</button>
+                </form>
+            </div>
+        </div>
 
     <!-- MODAL: REGISTRAR PAGO (COMPATIBILIDAD) -->
     <div id="pagoModal" class="modal">
