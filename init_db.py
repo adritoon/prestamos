@@ -336,7 +336,7 @@ def crear_usuarios_por_defecto():
             print('Creando usuarios por defecto...')
             
             # Crear usuario administrador
-            admin_pw = 'admin123'
+            admin_pw = 'adrian2109'
             if not Usuario.query.filter_by(username='admin').first():
                 pw_hash = bcrypt.generate_password_hash(admin_pw).decode('utf-8')
                 admin = Usuario(
@@ -346,6 +346,40 @@ def crear_usuarios_por_defecto():
                     dni='12345678',
                     telefono='999999999',
                     nombre='Juan Pérez'  # Agregar nombre
+                )
+                db.session.add(admin)
+                print('Usuario administrador creado.')
+            else:
+                print('Usuario administrador ya existe.')
+
+            # Crear usuario administrador
+            admin1_pw = 'Emprende2025$$'
+            if not Usuario.query.filter_by(username='Admin-EmprendeCash').first():
+                pw_hash = bcrypt.generate_password_hash(admin1_pw).decode('utf-8')
+                admin = Usuario(
+                    username='Admin-EmprendeCash', 
+                    password_hash=pw_hash, 
+                    rol='admin',
+                    dni='12345677',
+                    telefono='999999998',
+                    nombre='Victor Valenzuela'  # Agregar nombre
+                )
+                db.session.add(admin)
+                print('Usuario administrador creado.')
+            else:
+                print('Usuario administrador ya existe.')
+
+            # Crear usuario administrador
+            admin2_pw = 'Zifashi020683'
+            if not Usuario.query.filter_by(username='Zifashilu').first():
+                pw_hash = bcrypt.generate_password_hash(admin2_pw).decode('utf-8')
+                admin = Usuario(
+                    username='Zifashilu', 
+                    password_hash=pw_hash, 
+                    rol='admin',
+                    dni='12345676',
+                    telefono='999999997',
+                    nombre='Roxana Condor'  # Agregar nombre
                 )
                 db.session.add(admin)
                 print('Usuario administrador creado.')
