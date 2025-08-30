@@ -354,10 +354,10 @@ def crear_usuarios_por_defecto():
 
             # Crear usuario administrador
             admin1_pw = 'Emprende2025$$'
-            if not Usuario.query.filter_by(username='Admin-EmprendeCash').first():
+            if not Usuario.query.filter_by(username='EmprendeCash').first():
                 pw_hash = bcrypt.generate_password_hash(admin1_pw).decode('utf-8')
                 admin = Usuario(
-                    username='Admin-EmprendeCash', 
+                    username='EmprendeCash', 
                     password_hash=pw_hash, 
                     rol='admin',
                     dni='12345677',
@@ -379,7 +379,7 @@ def crear_usuarios_por_defecto():
                     rol='admin',
                     dni='12345676',
                     telefono='999999997',
-                    nombre='Roxana Condor'  # Agregar nombre
+                    nombre='Roxana Condor'  # Agregar nombre
                 )
                 db.session.add(admin)
                 print('Usuario administrador creado.')
