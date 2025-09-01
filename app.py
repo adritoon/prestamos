@@ -156,10 +156,14 @@ class Prestamo(db.Model):
 
         hoy = get_current_date()
         fecha_fin = self.fecha_fin or (self.fecha_inicio + timedelta(days=30))
-        dias_transcurridos = calcular_dias_habiles(self.fecha_inicio, min(hoy, fecha_fin))
+        if hoy <= self.fecha_inicio:
+            dias_a_cobrar = 0
+        else:
+            # Empezamos a contar desde el día SIGUIENTE al inicio
+            dias_a_cobrar = calcular_dias_habiles(self.fecha_inicio + timedelta(days=1), min(hoy, fecha_fin))
 
         # Calcular deuda esperada sin mora
-        deuda_esperada = Decimal(str(dias_transcurridos)) * self.cuota_diaria
+        deuda_esperada = Decimal(str(dias_a_cobrar)) * self.cuota_diaria
         total_pagado = sum(Decimal(str(cuota.monto)) for cuota in self.cuotas)
         deuda_vencida_base = max(Decimal('0.0'), deuda_esperada - total_pagado)
 
